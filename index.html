@@ -18,7 +18,7 @@
     canvas { display:block; width:100vw; height:100vh; touch-action:none; }
     #banner { position:fixed; inset:auto 0 40% 0; text-align:center; font-size:28px; font-weight:700; letter-spacing:1px; text-shadow:0 2px 10px #000; }
 
-    /* ---- Main Menu / Pause Overlay ---- */
+    /* --- Main Menu / Pause Overlay --- */
     #menu {
       position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
       background:linear-gradient(180deg, rgba(5,7,11,.92), rgba(5,7,11,.75));
@@ -43,7 +43,7 @@
     /* --- Touch Controls (show on mobile, hide on desktop) --- */
     #touch {
       position:fixed; inset:0; pointer-events:none; touch-action:none;
-      display:none; /* default hidden; toggled by media query + JS */
+      display:none; /* managed by JS */
     }
     .stickArea {
       position:absolute; width:42vw; height:42vh; max-width:420px; max-height:420px;
@@ -69,9 +69,7 @@
     #btnWrench{ right:98px; bottom:18px; }
     #btnGrav  { right:178px; bottom:18px; }
 
-    /* Only show touch layer on coarse pointers (phones/tablets) */
     @media (pointer:coarse) {
-      #touch { display:block; }
       #log { display:none; }           /* keep it clean on mobile */
       #ui { font-size:12px; gap:8px; } /* compact HUD */
       .chip { padding:3px 6px; }
@@ -87,12 +85,12 @@
       <span class="chip" id="gun">Gun: -</span>
       <span class="chip" id="ammo">Ammo: 0</span>
       <span class="chip" id="cons">NanoInject×0 | Wrench×0 | Gravite×0</span>
-      <span class="chip" id="zone">Zone: stable</span>
+      <span class="chip" id="zone">Anomaly: stable</span>
       <span class="chip" id="alive">Alive: -</span>
       <span class="chip" id="time">Time: 0:00</span>
     </div>
     <div style="flex:1"></div>
-    <!-- Keep PC buttons; mobile uses its own buttons below -->
+    <!-- PC buttons; mobile has its own -->
     <button class="btn" id="useNano">Use Nano</button>
     <button class="btn" id="useWrench">Use Wrench</button>
     <button class="btn" id="useGravite">Use Gravite</button>
@@ -112,8 +110,8 @@
           <ul>
             <li><b>Move:</b> WASD / Arrow Keys / Left Stick</li>
             <li><b>Aim:</b> Mouse / Right Stick</li>
-            <li><b>Shoot:</b> Left Mouse / Hold Right Stick / Shoot Button</li>
-            <li><b>Jetpack (spacewalk only):</b> Right Mouse / Jet Button</li>
+            <li><b>Shoot:</b> Hold Left Mouse / Hold Right Stick / Shoot Button</li>
+            <li><b>Jetpack (spacewalk only):</b> Hold Right Mouse / Jet Button</li>
             <li><b>Use Items:</b> Buttons</li>
             <li><b>Pause / Resume:</b> Esc</li>
           </ul>
@@ -122,7 +120,7 @@
           <h3 style="margin:0 0 6px">Tips</h3>
           <ul>
             <li>Planets block line of sight and bullets.</li>
-            <li>Ammo scarce early—grab drops.</li>
+            <li>Ammo is scarce early—grab drops.</li>
             <li>Anomaly hurts more the further out you are.</li>
           </ul>
         </div>
@@ -232,7 +230,7 @@
     explosions: [],
     loot: [],
     planets: [],
-    inputs: { mx:0, my:0, lmb:false, rmb:false, keys:{}, move:{x:0,y:0} },
+    inputs: { mx:0, my:0, lmb:false, rmb:false, keys:{}, move:{x:0,y:0}, mouse:{lmb:false, rmb:false} },
     zone: { x:0, y:0, r:3000, targetR:3000, phase:0, phaseTimer:14, shrinkTime:26, pauseTime:12, minR:28 },
     rules: {
       startBots: 50,
@@ -371,11 +369,17 @@
         state.paused = !state.paused;
         setMenuVisibility(state.paused, /*pausedLabel*/ true);
         last = performance.now();
+        updateTouchVisibility(); // keep joysticks off while paused/menu
       }
     }
   }, {passive:true});
   addEventListener('keyup',   e=>{ keys[e.code]=false; }, {passive:true});
-  addEventListener('blur', ()=>{ state.inputs.lmb=false; state.inputs.rmb=false; }, {passive:true});
+  addEventListener('blur', ()=>{
+    state.inputs.mouse.lmb = false;
+    state.inputs.mouse.rmb = false;
+    state.inputs.lmb = false;
+    state.inputs.rmb = false;
+  }, {passive:true});
   addEventListener('contextmenu', e=>e.preventDefault());
 
   canvas.addEventListener('mousemove', e=>{
@@ -383,14 +387,13 @@
     state.inputs.mx = e.clientX - rect.left - rect.width/2;
     state.inputs.my = e.clientY - rect.top  - rect.height/2;
   });
-
   canvas.addEventListener('mousedown', e=>{
-    if (e.button===0) state.inputs.lmb = true;
-    if (e.button===2) state.inputs.rmb = true;
+    if (e.button===0) state.inputs.mouse.lmb = true;
+    if (e.button===2) state.inputs.mouse.rmb = true;
   });
   canvas.addEventListener('mouseup', e=>{
-    if (e.button===0) state.inputs.lmb = false;
-    if (e.button===2) state.inputs.rmb = false;
+    if (e.button===0) state.inputs.mouse.lmb = false;
+    if (e.button===2) state.inputs.mouse.rmb = false;
   });
 
   // ==============================
@@ -568,7 +571,6 @@
   // ==============================
   let last = performance.now();
   function frame(now){
-    // cap mobile FPS a bit to save heat/battery
     const dt = Math.min(0.033, (now-last)/1000);
     last = now;
     if (!state.paused) state.time += dt;
@@ -576,6 +578,128 @@
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  // ==============================
+  // Touch Controls (setup early so we can combine with mouse)
+  // ==============================
+  const touchLayer = document.getElementById('touch');
+  const leftArea = document.getElementById('leftStick');
+  const rightArea = document.getElementById('rightStick');
+  const leftKnob = document.getElementById('leftKnob');
+  const rightKnob = document.getElementById('rightKnob');
+  const btnShoot = document.getElementById('btnShoot');
+  const btnJet   = document.getElementById('btnJet');
+  const btnNano  = document.getElementById('btnNano');
+  const btnWrench= document.getElementById('btnWrench');
+  const btnGrav  = document.getElementById('btnGrav');
+
+  const touchState = {
+    leftId:null, rightId:null,
+    lx:0, ly:0, rx:0, ry:0,
+    aimActive:false, shootHeld:false, jetHeld:false
+  };
+
+  function isCoarse(){ return matchMedia('(pointer:coarse)').matches; }
+  function updateTouchVisibility(){
+    const show = isCoarse() && !state.paused && !state.over;
+    touchLayer.style.display = show ? 'block' : 'none';
+  }
+  updateTouchVisibility();
+  addEventListener('resize', updateTouchVisibility);
+
+  function normStick(x,y,cx,cy,limit){
+    const dx = x - cx, dy = y - cy;
+    const d = Math.hypot(dx,dy);
+    const nx = d ? dx/d : 0, ny = d ? dy/d : 0;
+    const m = Math.min(d/limit, 1);
+    return {nx:nx*m, ny:ny*m, dx:dx, dy:dy, d:m};
+  }
+
+  function bindStick(area, knob, side){
+    const radius = 70; // knob travel radius
+
+    function getLocal(e){
+      const r = area.getBoundingClientRect();
+      const t = e.changedTouches ? e.changedTouches[0] : e;
+      return { x: t.clientX - r.left, y: t.clientY - r.top };
+    }
+
+    area.addEventListener('touchstart', (e)=>{
+      e.preventDefault();
+      for (const t of e.changedTouches){
+        if (side==='left' && touchState.leftId===null){
+          touchState.leftId = t.identifier;
+          const p = getLocal(e);
+          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
+          touchState.lx = v.nx; touchState.ly = v.ny;
+          leftKnob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
+          leftKnob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
+        } else if (side==='right' && touchState.rightId===null){
+          touchState.rightId = t.identifier;
+          const p = getLocal(e);
+          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
+          touchState.rx = v.nx; touchState.ry = v.ny;
+          touchState.aimActive = v.d > 0.05;
+          rightKnob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
+          rightKnob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
+        }
+      }
+    }, {passive:false});
+
+    area.addEventListener('touchmove', (e)=>{
+      e.preventDefault();
+      for (const t of e.changedTouches){
+        if (side==='left' && t.identifier===touchState.leftId){
+          const p = getLocal(e);
+          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
+          touchState.lx = v.nx; touchState.ly = v.ny;
+          leftKnob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
+          leftKnob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
+        }
+        if (side==='right' && t.identifier===touchState.rightId){
+          const p = getLocal(e);
+          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
+          touchState.rx = v.nx; touchState.ry = v.ny;
+          touchState.aimActive = v.d > 0.05;
+          rightKnob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
+          rightKnob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
+        }
+      }
+    }, {passive:false});
+
+    function reset(side){
+      if (side==='left'){
+        touchState.leftId=null; touchState.lx=0; touchState.ly=0;
+      } else {
+        touchState.rightId=null; touchState.rx=0; touchState.ry=0; touchState.aimActive=false;
+      }
+      knob.style.left = '50%'; knob.style.top = '50%';
+    }
+
+    area.addEventListener('touchend', (e)=>{ e.preventDefault(); for (const t of e.changedTouches){ if (side==='left' && t.identifier===touchState.leftId) reset('left'); if (side==='right' && t.identifier===touchState.rightId) reset('right'); } }, {passive:false});
+    area.addEventListener('touchcancel', (e)=>{ e.preventDefault(); for (const t of e.changedTouches){ if (side==='left' && t.identifier===touchState.leftId) reset('left'); if (side==='right' && t.identifier===touchState.rightId) reset('right'); } }, {passive:false});
+  }
+  bindStick(leftArea, leftKnob, 'left');
+  bindStick(rightArea, rightKnob, 'right');
+
+  function bindHold(btn, on, off){
+    let holding=false;
+    btn.addEventListener('touchstart', (e)=>{ e.preventDefault(); holding=true; on(); }, {passive:false});
+    btn.addEventListener('touchend',   (e)=>{ e.preventDefault(); holding=false; off(); }, {passive:false});
+    btn.addEventListener('touchcancel',(e)=>{ e.preventDefault(); holding=false; off(); }, {passive:false});
+    btn.addEventListener('mousedown', ()=>{ holding=true; on(); });
+    addEventListener('mouseup', ()=>{ if(holding){ holding=false; off(); }});
+  }
+  bindHold(btnShoot, ()=>{ touchState.shootHeld=true; }, ()=>{ touchState.shootHeld=false; });
+  bindHold(btnJet,   ()=>{ touchState.jetHeld=true;  }, ()=>{ touchState.jetHeld=false;  });
+
+  // Item buttons (touch) trigger same logic as PC buttons
+  btnNano.addEventListener('touchstart', (e)=>{ e.preventDefault(); document.getElementById('useNano').click(); }, {passive:false});
+  btnWrench.addEventListener('touchstart',(e)=>{ e.preventDefault(); document.getElementById('useWrench').click(); }, {passive:false});
+  btnGrav.addEventListener('touchstart',  (e)=>{ e.preventDefault(); document.getElementById('useGravite').click(); }, {passive:false});
+
+  // Prevent pinch zoom / pull-to-refresh while playing
+  addEventListener('touchmove', (e)=>{ if (isCoarse()) e.preventDefault(); }, {passive:false});
 
   // ==============================
   // Step
@@ -591,12 +715,17 @@
 
     if (state.paused) { updateHud(); return; }
 
+    // Combine inputs (mouse + touch) BEFORE actions
+    const fireHeld = state.inputs.mouse.lmb || touchState.shootHeld || touchState.aimActive;
+    const jetHeld  = state.inputs.mouse.rmb || touchState.jetHeld;
+    state.inputs.lmb = fireHeld;
+    state.inputs.rmb = jetHeld;
+
     // Movement (KB + left stick)
     const mv = state.inputs.move;
     mv.x = (keys.KeyD||keys.ArrowRight?1:0) - (keys.KeyA||keys.ArrowLeft?1:0) + (touchState.lx || 0);
     mv.y = (keys.KeyS||keys.ArrowDown?1:0) - (keys.KeyW||keys.ArrowUp?1:0) + (touchState.ly || 0);
-    // normalize (so KB + stick doesn’t exceed)
-    const mlen = Math.hypot(mv.x,mv.y);
+    let mlen = Math.hypot(mv.x,mv.y);
     if (mlen>1){ mv.x/=mlen; mv.y/=mlen; }
     const spd = 40;
     state.player.vx += (mv.x)*spd*dt;
@@ -606,25 +735,16 @@
     let aimX = state.inputs.mx + cam.x;
     let aimY = state.inputs.my + cam.y;
     if (touchState.aimActive){
-      // aim from player using right stick delta scaled
-      const scale = 280; // how far to cast aim ray
+      const scale = 280; // stick aim length
       aimX = state.player.x + touchState.rx * scale;
       aimY = state.player.y + touchState.ry * scale;
-      // auto-fire while stick engaged (and/or Shoot button held)
-      state.inputs.lmb = true;
-    } else if (!touchState.shootHeld) {
-      // if stick not active and shoot button not held, mouse controls fire
-      // keep lmb as set by mouse
     }
-
     state.player.angle = Math.atan2(aimY - state.player.y, aimX - state.player.x);
 
     // Planet contact
     state.player.onPlanet = !!planetAt(state.player.x, state.player.y);
 
-    // Jet: RMB or Jet button
-    state.inputs.rmb = touchState.jetHeld || state.inputs.rmb;
-
+    // Jet (hold works on PC now)
     const jet = state.player.jet;
     if (!state.player.onPlanet && state.inputs.rmb && jet.fuel>0){
       jet.active = true;
@@ -637,8 +757,7 @@
       if (!state.inputs.rmb) jet.fuel = clamp(jet.fuel + dt*0.18, 0, 1 + (state.player.inv.gravite>0?0.5:0));
     }
 
-    // Shooting
-    if (touchState.shootHeld) state.inputs.lmb = true;
+    // Shooting (auto works when LMB held)
     tryShoot(state.player, dt);
 
     // AI
@@ -728,10 +847,6 @@
 
     updateCamera(dt);
     updateHud();
-
-    // reset one-frame touch toggles
-    if (!touchState.aimActive && !touchState.shootHeld) state.inputs.lmb = false;
-    if (!touchState.jetHeld) state.inputs.rmb = false;
   }
 
   function updateHud(){
@@ -826,7 +941,7 @@
   function glyph(x,y,t){ ctx.fillStyle='#07111f'; ctx.font='10px system-ui,Segoe UI,Roboto,Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,x,y); }
 
   // ==============================
-  // Consumables (PC + Mobile)
+  // Consumables
   // ==============================
   const useNano    = document.getElementById('useNano');
   const useWrench  = document.getElementById('useWrench');
@@ -849,145 +964,30 @@
     pauseLabel.style.display = show && showPauseLabel ? 'block' : 'none';
     startBtn.style.display = (!showPauseLabel && show) ? 'inline-block' : 'none';
     resumeBtn.style.display = (showPauseLabel && show) ? 'inline-block' : 'none';
+    updateTouchVisibility(); // keep joysticks hidden while menu is up
   }
   function showEndMenu(){
     state.paused = true;
     setMenuVisibility(true, true);
     pauseLabel.textContent = (state.win ? 'Victory — Esc to resume (spectate disabled)' : 'Defeat — Esc to retry');
+    updateTouchVisibility();
   }
-  startBtn.addEventListener('click', ()=>{ state.paused = false; setMenuVisibility(false, false); last = performance.now(); });
-  resumeBtn.addEventListener('click', ()=>{ if (!state.over){ state.paused = false; setMenuVisibility(false, true); last = performance.now(); }});
+  startBtn.addEventListener('click', ()=>{
+    state.paused = false;
+    setMenuVisibility(false, false);
+    last = performance.now();
+    updateTouchVisibility();
+  });
+  resumeBtn.addEventListener('click', ()=>{
+    if (!state.over){
+      state.paused = false;
+      setMenuVisibility(false, true);
+      last = performance.now();
+      updateTouchVisibility();
+    }
+  });
   restartBtn.addEventListener('click', ()=>location.reload());
   setMenuVisibility(true, false);
-
-  // ==============================
-  // Touch Controls
-  // ==============================
-  const touchLayer = document.getElementById('touch');
-  const leftArea = document.getElementById('leftStick');
-  const rightArea = document.getElementById('rightStick');
-  const leftKnob = document.getElementById('leftKnob');
-  const rightKnob = document.getElementById('rightKnob');
-  const btnShoot = document.getElementById('btnShoot');
-  const btnJet   = document.getElementById('btnJet');
-  const btnNano  = document.getElementById('btnNano');
-  const btnWrench= document.getElementById('btnWrench');
-  const btnGrav  = document.getElementById('btnGrav');
-
-  // show/hide touch layer at runtime if device changes
-  function updateTouchVisibility(){
-    const coarse = matchMedia('(pointer:coarse)').matches;
-    touchLayer.style.display = coarse ? 'block' : 'none';
-  }
-  updateTouchVisibility();
-  addEventListener('resize', updateTouchVisibility);
-
-  const touchState = {
-    leftId:null, rightId:null,
-    lx:0, ly:0, rx:0, ry:0,
-    aimActive:false, shootHeld:false, jetHeld:false
-  };
-
-  function normStick(x,y,cx,cy,limit){
-    const dx = x - cx, dy = y - cy;
-    const d = Math.hypot(dx,dy);
-    const nx = d ? dx/d : 0, ny = d ? dy/d : 0;
-    const m = Math.min(d/limit, 1);
-    return {nx:nx*m, ny:ny*m, dx:dx, dy:dy, d:m};
-  }
-
-  function bindStick(area, knob, side){
-    const radius = 70; // knob travel radius
-    let center = {x:0,y:0};
-
-    function getLocal(e){
-      const r = area.getBoundingClientRect();
-      const t = e.changedTouches ? e.changedTouches[0] : e;
-      return { x: t.clientX - r.left, y: t.clientY - r.top };
-    }
-
-    area.addEventListener('touchstart', (e)=>{
-      e.preventDefault();
-      for (const t of e.changedTouches){
-        // assign if free or same side
-        if (side==='left' && touchState.leftId===null){
-          touchState.leftId = t.identifier;
-          const p = getLocal(e);
-          center = { x: area.clientWidth/2, y: area.clientHeight/2 };
-          const v = normStick(p.x, p.y, center.x, center.y, radius);
-          touchState.lx = v.nx; touchState.ly = v.ny;
-          knob.style.left = (center.x + v.nx*radius) + 'px';
-          knob.style.top  = (center.y + v.ny*radius) + 'px';
-        } else if (side==='right' && touchState.rightId===null){
-          touchState.rightId = t.identifier;
-          const p = getLocal(e);
-          center = { x: area.clientWidth/2, y: area.clientHeight/2 };
-          const v = normStick(p.x, p.y, center.x, center.y, radius);
-          touchState.rx = v.nx; touchState.ry = v.ny;
-          touchState.aimActive = v.d > 0.05;
-          knob.style.left = (center.x + v.nx*radius) + 'px';
-          knob.style.top  = (center.y + v.ny*radius) + 'px';
-        }
-      }
-    }, {passive:false});
-
-    area.addEventListener('touchmove', (e)=>{
-      e.preventDefault();
-      for (const t of e.changedTouches){
-        if (side==='left' && t.identifier===touchState.leftId){
-          const p = getLocal(e);
-          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
-          touchState.lx = v.nx; touchState.ly = v.ny;
-          knob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
-          knob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
-        }
-        if (side==='right' && t.identifier===touchState.rightId){
-          const p = getLocal(e);
-          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
-          touchState.rx = v.nx; touchState.ry = v.ny;
-          touchState.aimActive = v.d > 0.05;
-          knob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
-          knob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
-        }
-      }
-    }, {passive:false});
-
-    function reset(side){
-      if (side==='left'){
-        touchState.leftId=null; touchState.lx=0; touchState.ly=0;
-      } else {
-        touchState.rightId=null; touchState.rx=0; touchState.ry=0; touchState.aimActive=false;
-      }
-      knob.style.left = '50%'; knob.style.top = '50%';
-    }
-
-    area.addEventListener('touchend', (e)=>{ e.preventDefault(); for (const t of e.changedTouches){ if (side==='left' && t.identifier===touchState.leftId) reset('left'); if (side==='right' && t.identifier===touchState.rightId) reset('right'); } }, {passive:false});
-    area.addEventListener('touchcancel', (e)=>{ e.preventDefault(); for (const t of e.changedTouches){ if (side==='left' && t.identifier===touchState.leftId) reset('left'); if (side==='right' && t.identifier===touchState.rightId) reset('right'); } }, {passive:false});
-  }
-  bindStick(leftArea, leftKnob, 'left');
-  bindStick(rightArea, rightKnob, 'right');
-
-  // Buttons (touch)
-  function bindHold(btn, on, off){
-    let holding=false;
-    btn.addEventListener('touchstart', (e)=>{ e.preventDefault(); holding=true; on(); }, {passive:false});
-    btn.addEventListener('touchend',   (e)=>{ e.preventDefault(); holding=false; off(); }, {passive:false});
-    btn.addEventListener('touchcancel',(e)=>{ e.preventDefault(); holding=false; off(); }, {passive:false});
-    // also support mouse just in case
-    btn.addEventListener('mousedown', ()=>{ holding=true; on(); });
-    addEventListener('mouseup', ()=>{ if(holding){ holding=false; off(); }});
-  }
-
-  bindHold(btnShoot, ()=>{ touchState.shootHeld=true; state.inputs.lmb=true; }, ()=>{ touchState.shootHeld=false; state.inputs.lmb=false; });
-  bindHold(btnJet,   ()=>{ touchState.jetHeld=true;  state.inputs.rmb=true; }, ()=>{ touchState.jetHeld=false; state.inputs.rmb=false; });
-
-  // Item buttons just call the same handlers
-  btnNano.addEventListener('touchstart', (e)=>{ e.preventDefault(); document.getElementById('useNano').click(); }, {passive:false});
-  btnWrench.addEventListener('touchstart',(e)=>{ e.preventDefault(); document.getElementById('useWrench').click(); }, {passive:false});
-  btnGrav.addEventListener('touchstart',  (e)=>{ e.preventDefault(); document.getElementById('useGravite').click(); }, {passive:false});
-
-  // Prevent pinch zoom / pull-to-refresh while playing
-  addEventListener('touchmove', (e)=>{ if (matchMedia('(pointer:coarse)').matches) e.preventDefault(); }, {passive:false});
 
   // ==============================
   // Helpers
@@ -1013,4 +1013,3 @@
 </script>
 </body>
 </html>
-
