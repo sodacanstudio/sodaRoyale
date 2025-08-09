@@ -41,14 +41,8 @@
     .touch-btn{ touch-action:none; -webkit-user-select:none; user-select:none; background:#112033d0; border:1px solid #1c3355; color:#cfe7ff; border-radius:12px; padding:10px 14px; font-weight:700; }
     .joystick{ width:120px; height:120px; border-radius:60px; background:#0e1622a0; border:1px solid #1b2940; touch-action:none; }
     .stick{ position:absolute; width:56px; height:56px; border-radius:28px; background:#1a2a42; border:1px solid #274168; transform:translate(-50%,-50%); left:50%; top:50%; pointer-events:none; }
-    /* Show on coarse pointer (touch). Hidden on desktop */
-    @media (pointer:coarse){
-      .mobileOnly{ display:block; }
-    }
-
-    /* Hide mobile controls while menu open */
+    @media (pointer:coarse){ .mobileOnly{ display:block; } }
     .hideDuringMenu{ pointer-events:none; opacity:0; }
-
   </style>
 </head>
 <body>
@@ -190,7 +184,7 @@
     loot: [],
     planets: [],
     inputs: { mx:0, my:0, lmb:false, rmb:false, keys:{}, move:{x:0,y:0}, shootHeld:false, jetHeld:false },
-    zone: { x:0, y:0, r:3000, targetR:3000, phase:0, phaseTimer:18, shrinkTime:28, pauseTime:14, minR:28 }, // slightly faster shrink
+    zone: { x:0, y:0, r:3000, targetR:3000, phase:0, phaseTimer:18, shrinkTime:28, pauseTime:14, minR:28 },
     rules: {
       startBots: 50,
       lootSpawnEvery: 2.5,
@@ -205,6 +199,12 @@
       minBotSpacingFrac: 0.14
     }
   };
+
+  // === MOBILE FIX: input mode + mouse activity tracker
+  let inputMode = { touchSeen: false, mouseActiveTimer: 0 };
+  function tickMouseTimer(dt){
+    if (inputMode.mouseActiveTimer > 0) inputMode.mouseActiveTimer = Math.max(0, inputMode.mouseActiveTimer - dt);
+  }
 
   // ==============================
   // Data
@@ -332,15 +332,22 @@
     const rect = canvas.getBoundingClientRect();
     state.inputs.mx = e.clientX - rect.left - rect.width/2;
     state.inputs.my = e.clientY - rect.top  - rect.height/2;
+    inputMode.mouseActiveTimer = 1.0; // === MOBILE FIX: only treat mouse aim as valid for a short time after movement
   });
+
   canvas.addEventListener('mousedown', e=>{
-    if (e.button===0) state.inputs.lmb = true;
-    if (e.button===2) state.inputs.rmb = true;
+    state.inputs.lmb = (e.button===0);
+    state.inputs.rmb = (e.button===2);
   });
   canvas.addEventListener('mouseup', e=>{
     if (e.button===0) state.inputs.lmb = false;
     if (e.button===2) state.inputs.rmb = false;
   });
+
+  // Mark if we’ve ever seen a touch/pointer that isn’t a mouse (used to lock shooting to the button)
+  addEventListener('pointerdown', e=>{
+    if (e.pointerType && e.pointerType !== 'mouse') inputMode.touchSeen = true;
+  }, {passive:true});
 
   // ==============================
   // Combat
@@ -353,7 +360,9 @@
     if (p.isAI) {
       if (p.ai.fireCd>0 || !p.ai.tgt || p.ammo<=0) return;
     } else {
-      const wantsToShoot = state.inputs.lmb || state.inputs.shootHeld; // PC or mobile
+      // === MOBILE FIX: on touch devices, only the SHOOT button can fire.
+      const mouseActive = inputMode.mouseActiveTimer > 0;
+      const wantsToShoot = (mouseActive ? state.inputs.lmb : false) || state.inputs.shootHeld;
       if (!wantsToShoot || p.ai.fireCd>0 || p.ammo<=0) return;
     }
 
@@ -520,6 +529,7 @@
   function frame(now){
     const dt = Math.min(0.033, (now-last)/1000);
     last = now; if (state.started) state.time += dt;
+    tickMouseTimer(dt);              // === MOBILE FIX
     step(dt); draw(dt);
     requestAnimationFrame(frame);
   }
@@ -529,9 +539,7 @@
   // Step
   // ==============================
   function step(dt){
-    // lock inputs while menu open except allowing keyboard/mouse aim to preview
     if (!state.started){
-      // keep camera on player spawn for background vibes
       updateCamera(dt);
       return;
     }
@@ -555,21 +563,37 @@
       state.player.vy += (inY/len)*spd*dt;
     }
 
-    // Aim (mouse OR right joystick vector)
-    if (!joyLook.active){
+    // === MOBILE FIX: Aim source priority
+    // 1) Right joystick (live)
+    // 2) Recent mouse movement (PC)
+    // 3) Otherwise, keep last angle (no jitter)
+    const mouseActive = inputMode.mouseActiveTimer > 0;
+    if (joyLook.active){
+      // angle already set in joystick handler
+    } else if (mouseActive){
       state.player.angle = Math.atan2(state.inputs.my + cam.y - state.player.y,
                                       state.inputs.mx + cam.x - state.player.x);
-    } else {
-      // joyLook sets state.player.angle in joystick handler
     }
 
     // Planet contact
-    state.player.onPlanet = !!planetAt(state.player.x, state.player.y);
+    const touchingPlanet = planetAt(state.player.x, state.player.y);
+    state.player.onPlanet = !!touchingPlanet;
 
-    // Jetpack: PC (RMB) OR mobile (jetHeld)
+    // === MOBILE FIX: Jetpack – allow thrust even on planet, plus a small pop to lift off
     const jet = state.player.jet;
+    jet.cd = Math.max(0, jet.cd - dt);
     const jetHeld = state.inputs.rmb || state.inputs.jetHeld;
-    if (!state.player.onPlanet && jetHeld && jet.fuel>0){
+    if (jetHeld && jet.fuel > 0){
+      if (state.player.onPlanet && jet.cd <= 0){
+        // small impulse away from the planet normal to break contact cleanly
+        const nx = (state.player.x - touchingPlanet.x);
+        const ny = (state.player.y - touchingPlanet.y);
+        const nlen = Math.hypot(nx, ny) || 1;
+        const pop = 28;
+        state.player.vx += (nx/nlen) * pop;
+        state.player.vy += (ny/nlen) * pop;
+        jet.cd = 0.18;
+      }
       jet.active = true;
       const thrust = 160;
       state.player.vx += Math.cos(state.player.angle)*thrust*dt;
@@ -870,7 +894,6 @@
     root.addEventListener('pointercancel', end);
     root.addEventListener('lostpointercapture', end);
 
-    // public state
     return { get active(){ return active; } };
   }
 
@@ -878,15 +901,13 @@
   const joyLookEl = document.getElementById('joyLook');
 
   const joyMove = makeJoystick(joyMoveEl, (x,y,act)=>{
-    // y is inverted because UI coords; flip to game coords where up is -1
     state.inputs.move.x = x;
-    state.inputs.move.y = y; // positive down is fine since we normalize on use
+    state.inputs.move.y = y;
   });
 
   const joyLook = makeJoystick(joyLookEl, (x,y,act)=>{
-    // convert joystick vector into angle (centered: no aim update)
     if (act && (x!==0 || y!==0)){
-      const ang = Math.atan2(y, x); // note: joystick coords; consistent with draw
+      const ang = Math.atan2(y, x); // joystick coords (y down) work fine with our math
       state.player.angle = ang;
     }
   });
