@@ -332,7 +332,7 @@
     const rect = canvas.getBoundingClientRect();
     state.inputs.mx = e.clientX - rect.left - rect.width/2;
     state.inputs.my = e.clientY - rect.top  - rect.height/2;
-    inputMode.mouseActiveTimer = 1.0; // === MOBILE FIX: only treat mouse aim as valid for a short time after movement
+    inputMode.mouseActiveTimer = 1.0;
   });
 
   canvas.addEventListener('mousedown', e=>{
@@ -344,7 +344,6 @@
     if (e.button===2) state.inputs.rmb = false;
   });
 
-  // Mark if we’ve ever seen a touch/pointer that isn’t a mouse (used to lock shooting to the button)
   addEventListener('pointerdown', e=>{
     if (e.pointerType && e.pointerType !== 'mouse') inputMode.touchSeen = true;
   }, {passive:true});
@@ -360,7 +359,7 @@
     if (p.isAI) {
       if (p.ai.fireCd>0 || !p.ai.tgt || p.ammo<=0) return;
     } else {
-      // === MOBILE FIX: on touch devices, only the SHOOT button can fire.
+      // on touch, only SHOOT button can fire; on PC, mouse must be recently active
       const mouseActive = inputMode.mouseActiveTimer > 0;
       const wantsToShoot = (mouseActive ? state.inputs.lmb : false) || state.inputs.shootHeld;
       if (!wantsToShoot || p.ai.fireCd>0 || p.ammo<=0) return;
@@ -368,15 +367,23 @@
 
     p.ai.fireCd = 1.0 / gun.fireRate;
 
-    const tx = p.isAI && p.ai.tgt ? p.ai.tgt.x : state.inputs.mx + cam.x;
-    const ty = p.isAI && p.ai.tgt ? p.ai.tgt.y : state.inputs.my + cam.y;
+    // === FACING-FIRE CHANGE ===
+    // Players: fire along current facing (p.angle). AI: still aim at target.
+    let ang;
+    if (p.isAI && p.ai.tgt){
+      const base = Math.atan2(p.ai.tgt.y - p.y, p.ai.tgt.x - p.x);
+      const extraAI = aiShot ? 0.06 : 0.0;
+      ang = base + (gun.spread ? rand(-(gun.spread+extraAI), (gun.spread+extraAI)) : 0);
+      p.angle = base; // AI turns to face target
+    } else {
+      ang = p.angle + (gun.spread ? rand(-gun.spread, gun.spread) : 0);
+      // do NOT overwrite p.angle for player; keep their facing stable
+    }
 
-    const extraAI = aiShot ? 0.06 : 0.0;
-    const ang = Math.atan2(ty - p.y, tx - p.x) + (gun.spread ? rand(-(gun.spread+extraAI), (gun.spread+extraAI)) : 0);
-    p.angle = ang;
-
+    const muzzle = p.r + 2;
     const b = {
-      x:p.x, y:p.y,
+      x: p.x + Math.cos(ang)*muzzle,
+      y: p.y + Math.sin(ang)*muzzle,
       vx: Math.cos(ang) * gun.bulletSpeed,
       vy: Math.sin(ang) * gun.bulletSpeed,
       from:p, ttl: 2.5, r: gun.splash?6:3, gl: !!gun.splash, damage: gun.damage
@@ -529,7 +536,7 @@
   function frame(now){
     const dt = Math.min(0.033, (now-last)/1000);
     last = now; if (state.started) state.time += dt;
-    tickMouseTimer(dt);              // === MOBILE FIX
+    tickMouseTimer(dt);
     step(dt); draw(dt);
     requestAnimationFrame(frame);
   }
@@ -563,10 +570,7 @@
       state.player.vy += (inY/len)*spd*dt;
     }
 
-    // === MOBILE FIX: Aim source priority
-    // 1) Right joystick (live)
-    // 2) Recent mouse movement (PC)
-    // 3) Otherwise, keep last angle (no jitter)
+    // Aim source priority
     const mouseActive = inputMode.mouseActiveTimer > 0;
     if (joyLook.active){
       // angle already set in joystick handler
@@ -579,13 +583,12 @@
     const touchingPlanet = planetAt(state.player.x, state.player.y);
     state.player.onPlanet = !!touchingPlanet;
 
-    // === MOBILE FIX: Jetpack – allow thrust even on planet, plus a small pop to lift off
+    // Jetpack (with pop off planet for clean lift)
     const jet = state.player.jet;
     jet.cd = Math.max(0, jet.cd - dt);
     const jetHeld = state.inputs.rmb || state.inputs.jetHeld;
     if (jetHeld && jet.fuel > 0){
       if (state.player.onPlanet && jet.cd <= 0){
-        // small impulse away from the planet normal to break contact cleanly
         const nx = (state.player.x - touchingPlanet.x);
         const ny = (state.player.y - touchingPlanet.y);
         const nlen = Math.hypot(nx, ny) || 1;
@@ -604,7 +607,7 @@
       if (!jetHeld) jet.fuel = clamp(jet.fuel + dt*0.18, 0, 1 + (state.player.inv.gravite>0?0.5:0));
     }
 
-    // Shooting (PC LMB or mobile shootHeld)
+    // Shooting
     tryShoot(state.player, dt);
 
     // AI
@@ -776,7 +779,7 @@
   function circle(x,y){ ctx.beginPath(); ctx.arc(x,y,9,0,TAU); ctx.fill(); }
   function tri(x,y){ ctx.beginPath(); ctx.moveTo(x,y-10); ctx.lineTo(x+9,y+7); ctx.lineTo(x-9,y+7); ctx.closePath(); ctx.fill(); }
   function hex(x,y){ ctx.beginPath(); for (let i=0;i<6;i++){ const a=i*TAU/6; const px=x+Math.cos(a)*10, py=y+Math.sin(a)*10; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.closePath(); ctx.fill(); }
-  function star(x,y){ ctx.beginPath(); for (let i=0;i<10;i++){ const r=(i%2?5:10); const a=i*TAU/10; const px=x+Math.cos(a)*r, py=y+Math.sin(a)*r; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.closePath(); ctx.fill(); }
+  function star(x,y){ ctx.beginPath(); for (let i=0;i<10;i++){ const r=(i%2?5:10); const a=i*TAU/10; const px=x+Math.cos(a)*r, py=y+Math.sin(a)*r; i?ctx.lineTo(px,py):ctx.MoveTo(px,py); } ctx.closePath(); ctx.fill(); }
   function glyph(x,y,t){ ctx.fillStyle='#07111f'; ctx.font='10px system-ui,Segoe UI,Roboto,Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,x,y); }
 
   // ==============================
@@ -861,7 +864,7 @@
     let active = false, pid = null;
 
     function setStick(dx,dy){
-      const radius = 48; // movement radius inside 60px outer
+      const radius = 48;
       const len = Math.hypot(dx,dy);
       const cl = len>radius ? radius/len : 1;
       const sx = center.x + dx*cl, sy = center.y + dy*cl;
@@ -907,7 +910,7 @@
 
   const joyLook = makeJoystick(joyLookEl, (x,y,act)=>{
     if (act && (x!==0 || y!==0)){
-      const ang = Math.atan2(y, x); // joystick coords (y down) work fine with our math
+      const ang = Math.atan2(y, x);
       state.player.angle = ang;
     }
   });
