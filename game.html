@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>SODA Royale</title>
+  <style>
+    html, body { margin:0; padding:0; background:#05070b; color:#cfe7ff; font:14px/1.45 system-ui, Segoe UI, Roboto, Arial; height:100%; overscroll-behavior:none; }
+    #ui { position:fixed; inset:0 0 auto 0; padding:8px 10px; display:flex; gap:12px; align-items:center;
+          background:linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,0)); user-select:none; pointer-events:none; }
+    #ui .btn { pointer-events:auto; }
+    #hud { display:flex; gap:14px; align-items:center; flex-wrap:wrap }
+    .chip { padding:4px 8px; border-radius:8px; background:#0e1622; border:1px solid #1b2940; }
+    .btn { padding:4px 8px; border-radius:6px; background:#112033; border:1px solid #1c3355; color:#cfe7ff; cursor:pointer; }
+    .btn[disabled] { opacity:.4; cursor:not-allowed; }
+    #log { position:fixed; right:8px; top:40px; width:320px; max-height:44vh; overflow:auto; font-size:12px; opacity:.85; }
+    #log div { margin:0 0 6px; padding:6px 8px; background:#0b1220; border:1px solid #14233d; border-radius:8px; }
+    canvas { display:block; width:100vw; height:100vh; touch-action:none; }
+    #banner { position:fixed; inset:auto 0 40% 0; text-align:center; font-size:28px; font-weight:700; letter-spacing:1px; text-shadow:0 2px 10px #000; }
+
+    /* --- Main Menu / Pause Overlay --- */
+    #menu {
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(180deg, rgba(5,7,11,.92), rgba(5,7,11,.75));
+      backdrop-filter: blur(4px);
+    }
+    #menuCard {
+      width:min(720px, 92vw);
+      border:1px solid #1b2940; border-radius:14px; background:#0c1421; padding:18px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.45);
+    }
+    #menu h1 { margin:0 0 10px 0; font-size:28px; letter-spacing:.5px; }
+    #menu .sub { opacity:.8; margin-bottom:14px }
+    #menu .grid { display:grid; grid-template-columns: 1.1fr .9fr; gap:14px; }
+    #menu .panel { background:#0e1622; border:1px solid #1c2a46; border-radius:12px; padding:12px; }
+    #menu ul { margin:8px 0 0; padding-left:18px; line-height:1.6; }
+    #menu .row { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; }
+    #menu .big { padding:10px 14px; border-radius:10px; font-weight:600; }
+    #menu .ghost { background:transparent; }
+    #menu .titleRow { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    #pauseLabel { font-size:14px; opacity:.8; }
+
+    /* --- Touch Controls (show on mobile, hide on desktop) --- */
+    #touch {
+      position:fixed; inset:0; pointer-events:none; touch-action:none;
+      display:none; /* default hidden; toggled by media query + JS */
+    }
+    .stickArea {
+      position:absolute; width:42vw; height:42vh; max-width:420px; max-height:420px;
+      pointer-events:auto; touch-action:none; border-radius:18px;
+      background:rgba(8,12,20,.06); border:1px solid rgba(28,42,70,.5);
+    }
+    #leftStick { left:12px; bottom:12px; }
+    #rightStick { right:12px; bottom:12px; }
+    .stick {
+      position:absolute; width:88px; height:88px; border-radius:50%;
+      background:rgba(25,50,85,.7); border:2px solid rgba(95,155,255,.9);
+      transform:translate(-50%,-50%); left:50%; top:50%;
+    }
+    .stick.knob { width:62px; height:62px; background:rgba(140,200,255,.9); border:0; mix-blend-mode:screen; }
+    .padBtn {
+      position:absolute; pointer-events:auto; touch-action:none;
+      padding:10px 14px; border-radius:12px; font-weight:700; border:1px solid #1c3355; background:#112033; color:#cfe7ff;
+      box-shadow:0 6px 20px rgba(0,0,0,.35);
+    }
+    #btnShoot { right:18px; bottom:48vh; }
+    #btnJet   { right:18px; bottom:58vh; }
+    #btnNano  { right:18px; bottom:18px; }
+    #btnWrench{ right:98px; bottom:18px; }
+    #btnGrav  { right:178px; bottom:18px; }
+
+    /* Only show touch layer on coarse pointers (phones/tablets) */
+    @media (pointer:coarse) {
+      #touch { display:block; }
+      #log { display:none; }           /* keep it clean on mobile */
+      #ui { font-size:12px; gap:8px; } /* compact HUD */
+      .chip { padding:3px 6px; }
+      .btn { padding:6px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div id="hud">
+      <span class="chip" id="hp">HP: 100</span>
+      <span class="chip" id="suit">Suit: 100</span>
+      <span class="chip" id="gun">Gun: -</span>
+      <span class="chip" id="ammo">Ammo: 0</span>
+      <span class="chip" id="cons">NanoInject×0 | Wrench×0 | Gravite×0</span>
+      <span class="chip" id="zone">Zone: stable</span>
+      <span class="chip" id="alive">Alive: -</span>
+      <span class="chip" id="time">Time: 0:00</span>
+    </div>
+    <div style="flex:1"></div>
+    <!-- Keep PC buttons; mobile uses its own buttons below -->
+    <button class="btn" id="useNano">Use Nano</button>
+    <button class="btn" id="useWrench">Use Wrench</button>
+    <button class="btn" id="useGravite">Use Gravite</button>
+  </div>
+
+  <!-- Main Menu / Pause Overlay -->
+  <div id="menu">
+    <div id="menuCard">
+      <div class="titleRow">
+        <h1>SODA Royale</h1>
+        <div id="pauseLabel" style="display:none;">Paused (Esc to resume)</div>
+      </div>
+      <div class="sub">Last one alive wins. Loot up, mind the planets, and don’t get caught in the anomaly field.</div>
+      <div class="grid">
+        <div class="panel">
+          <h3 style="margin:0 0 6px">Controls</h3>
+          <ul>
+            <li><b>Move:</b> WASD / Arrow Keys / Left Stick</li>
+            <li><b>Aim:</b> Mouse / Right Stick</li>
+            <li><b>Shoot:</b> Left Mouse / Hold Right Stick / Shoot Button</li>
+            <li><b>Jetpack (spacewalk only):</b> Right Mouse / Jet Button</li>
+            <li><b>Use Items:</b> Buttons</li>
+            <li><b>Pause / Resume:</b> Esc</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3 style="margin:0 0 6px">Tips</h3>
+          <ul>
+            <li>Planets block line of sight and bullets.</li>
+            <li>Ammo scarce early—grab drops.</li>
+            <li>Anomaly hurts more the further out you are.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="row">
+        <button id="restartBtn" class="btn ghost big">Restart</button>
+        <button id="resumeBtn" class="btn big" style="display:none;">Resume</button>
+        <button id="startBtn" class="btn big">Play</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="log"></div>
+  <div id="banner"></div>
+  <canvas id="c"></canvas>
+
+  <!-- Touch Controls Layer -->
+  <div id="touch" aria-hidden="true">
+    <div id="leftStick" class="stickArea">
+      <div class="stick base"></div>
+      <div class="stick knob" id="leftKnob"></div>
+    </div>
+    <div id="rightStick" class="stickArea">
+      <div class="stick base"></div>
+      <div class="stick knob" id="rightKnob"></div>
+    </div>
+    <button id="btnShoot" class="padBtn">Shoot</button>
+    <button id="btnJet"   class="padBtn">Jet</button>
+    <button id="btnNano"  class="padBtn">Nano</button>
+    <button id="btnWrench"class="padBtn">Wrench</button>
+    <button id="btnGrav"  class="padBtn">Gravite</button>
+  </div>
+
+<script>
+(() => {
+  // ==============================
+  // Utils
+  // ==============================
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const rand = (a,b) => a + Math.random()*(b-a);
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+
+  function chooseWeighted(entries){
+    const total = entries.reduce((s,e)=>s+e.w,0);
+    let r = Math.random()*total;
+    for (const e of entries){ if ((r -= e.w) <= 0) return e.value; }
+    return entries.at(-1).value;
+  }
+
+  function segmentHitsCircle(ax,ay,bx,by,cx,cy,r){
+    const ABx = bx-ax, ABy = by-ay;
+    const ACx = cx-ax, ACy = cy-ay;
+    const ab2 = ABx*ABx + ABy*ABy || 1;
+    let t = (ACx*ABx + ACy*ABy) / ab2;
+    t = clamp01(t);
+    const px = ax + ABx*t, py = ay + ABy*t;
+    const dx = px - cx, dy = py - cy;
+    return (dx*dx + dy*dy) <= r*r;
+  }
+  function hasLineOfSight(ax,ay,bx,by){
+    for (const p of state.planets){
+      if (segmentHitsCircle(ax,ay,bx,by,p.x,p.y,p.r)) return false;
+    }
+    return true;
+  }
+
+  // ==============================
+  // Canvas / View
+  // ==============================
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: true });
+  const view = { w:0, h:0, dpr:1 };
+  function resize(){
+    view.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    view.w = Math.floor(innerWidth);
+    view.h = Math.floor(innerHeight);
+    canvas.width  = Math.floor(view.w * view.dpr);
+    canvas.height = Math.floor(view.h * view.dpr);
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  // ==============================
+  // UI Log
+  // ==============================
+  const logEl = document.getElementById('log');
+  function log(t){
+    const d = document.createElement('div');
+    d.textContent = t;
+    logEl.prepend(d);
+    while (logEl.children.length > 14) logEl.lastChild.remove();
+  }
+
+  // ==============================
+  // Game State
+  // ==============================
+  const state = {
+    time: 0,
+    paused: true,
+    over: false,
+    win: false,
+    player: null,
+    ai: [],
+    bullets: [],
+    explosions: [],
+    loot: [],
+    planets: [],
+    inputs: { mx:0, my:0, lmb:false, rmb:false, keys:{}, move:{x:0,y:0} },
+    zone: { x:0, y:0, r:3000, targetR:3000, phase:0, phaseTimer:14, shrinkTime:26, pauseTime:12, minR:28 },
+    rules: {
+      startBots: 50,
+      lootSpawnEvery: 2.5,
+      lastLootSpawn: 0,
+      weaponGroundHardCap: 10,
+      matchMinSeconds: 240,
+      botSpeedScale: 0.72,
+      aiMaxSpeed: 220,
+      aiAccel: { zonePush: 32, chase: 24, ammoHunt: 40, wander: 18 },
+      spawnInnerFrac: 0.62,
+      spawnSafeMargin: 80,
+      minBotSpacingFrac: 0.14
+    }
+  };
+
+  // ==============================
+  // Data
+  // ==============================
+  const Guns = {
+    pistol: {name:'Small Blaster', tier:'common',   damage:10, bulletSpeed:520, spread:0.04, fireRate:4.0,  maxAmmo:60},
+    smg:    {name:'Tactical Blaster', tier:'uncommon', damage:8, bulletSpeed:600, spread:0.08, fireRate:10.0, maxAmmo:160},
+    rifle:  {name:'Rifle Blaster', tier:'uncommon', damage:14, bulletSpeed:700, spread:0.02, fireRate:6.0,  maxAmmo:120},
+    gl:     {name:'Grenade Launcher', tier:'rare',   damage:28, bulletSpeed:360, spread:0.00, fireRate:1.0,  maxAmmo:12, splash:64}
+  };
+  const GunOrder = ['pistol','smg','rifle','gl'];
+
+  const LootViz = {
+    ammo:   { color:'#53e571', draw:(x,y)=>{ box(x,y); glyph(x,y,'A'); } },
+    nano:   { color:'#55b6ff', draw:(x,y)=>{ circle(x,y); glyph(x,y,'+'); } },
+    wrench: { color:'#ffd257', draw:(x,y)=>{ hex(x,y); glyph(x,y,'W'); } },
+    gravite:{ color:'#c069ff', draw:(x,y)=>{ tri(x,y); glyph(x,y,'G'); } },
+    gun:    { color:'#a6c8ff', draw:(x,y,kind)=>{ star(x,y); glyph(x,y, Guns[kind.gun].name.split(' ')[0][0]); } }
+  };
+
+  const WeightedLoot = [
+    {w: 40, value: {type:'ammo', amount:30}},
+    {w: 25, value: {type:'nano', amount:1}},
+    {w: 25, value: {type:'wrench', amount:1}},
+    {w: 16, value: {type:'gravite', amount:1}},
+    {w:  6, value: {type:'gun', gun:'pistol'}},
+    {w:  4, value: {type:'gun', gun:'smg'}},
+    {w:  4, value: {type:'gun', gun:'rifle'}},
+    {w:  2, value: {type:'gun', gun:'gl'}},
+  ];
+
+  // ==============================
+  // Entities
+  // ==============================
+  function makePlayer(x,y,isAI=false){
+    return {
+      x, y, vx:0, vy:0, r:10,
+      hp:100, suit:100, maxHp:100, maxSuit:100,
+      gunKey:'pistol', ammo:30,
+      inv:{nano:0,wrench:0,gravite:0},
+      isAI,
+      ai:{fireCd:0, thinkCd:0, tgt:null, hideTimer:0, wanderA:Math.random()*TAU},
+      jet:{fuel:1, cd:0, active:false},
+      onPlanet:false, angle:0
+    };
+  }
+
+  function spawnAI(n){
+    const inner = state.zone.r * state.rules.spawnInnerFrac;
+    const outer = state.zone.r - state.rules.spawnSafeMargin;
+    const minD  = state.zone.r * state.rules.minBotSpacingFrac;
+    const farFromPlayer = minD * 1.6;
+
+    const placed = [];
+    let attempts = 0, maxAttempts = 8000;
+
+    while (placed.length < n && attempts++ < maxAttempts){
+      const a = Math.random() * TAU;
+      const d = rand(inner, outer);
+      const x = Math.cos(a) * d, y = Math.sin(a) * d;
+      if (Math.hypot(x - state.player.x, y - state.player.y) < farFromPlayer) continue;
+      let ok = true;
+      for (const p of placed){
+        if (Math.hypot(x - p.x, y - p.y) < minD){ ok = false; break; }
+      }
+      if (!ok) continue;
+      const bot = makePlayer(x, y, true);
+      bot.gunKey = GunOrder[Math.floor(rand(0, GunOrder.length))];
+      bot.ammo   = Math.floor(Guns[bot.gunKey].maxAmmo * 0.28);
+      placed.push({x,y});
+      state.ai.push(bot);
+    }
+    while (state.ai.length < n){
+      const a = Math.random() * TAU;
+      const d = rand(inner, outer);
+      const x = Math.cos(a) * d, y = Math.sin(a) * d;
+      const bot = makePlayer(x, y, true);
+      bot.gunKey = GunOrder[Math.floor(rand(0, GunOrder.length))];
+      bot.ammo   = Math.floor(Guns[bot.gunKey].maxAmmo * 0.25);
+      state.ai.push(bot);
+    }
+  }
+
+  function genPlanets(){
+    const count = 7;
+    for(let i=0;i<count;i++){
+      const a = Math.random()*TAU;
+      const d = rand(160, 1000);
+      const x = Math.cos(a)*d, y = Math.sin(a)*d;
+      state.planets.push({
+        x,y, r: rand(32,92),
+        color: `hsl(${Math.floor(rand(180,320))} 45% 45%)`
+      });
+    }
+  }
+
+  // ==============================
+  // Loot
+  // ==============================
+  function spawnLootBurst(n){ for(let i=0;i<n;i++) spawnLoot(); }
+  function spawnLoot(){
+    const weaponOnGround = state.loot.filter(l=>l.kind.type==='gun').length;
+    let entry = chooseWeighted(WeightedLoot);
+    if (entry.type === 'gun' && weaponOnGround >= state.rules.weaponGroundHardCap){
+      entry = chooseWeighted(WeightedLoot.filter(e=>e.value.type!=='gun'));
+    }
+    const a = Math.random()*TAU;
+    const d = rand(120, state.zone.r*0.9);
+    const x = Math.cos(a)*d, y = Math.sin(a)*d;
+    state.loot.push({ x,y, r:9, kind:entry, ttl: 180 });
+  }
+
+  // ==============================
+  // Input (KB/M + Pause)
+  // ==============================
+  const keys = state.inputs.keys;
+  addEventListener('keydown', e=>{
+    keys[e.code]=true;
+    if (e.code === 'Escape'){
+      if (!state.over){
+        state.paused = !state.paused;
+        setMenuVisibility(state.paused, /*pausedLabel*/ true);
+        last = performance.now();
+      }
+    }
+  }, {passive:true});
+  addEventListener('keyup',   e=>{ keys[e.code]=false; }, {passive:true});
+  addEventListener('blur', ()=>{ state.inputs.lmb=false; state.inputs.rmb=false; }, {passive:true});
+  addEventListener('contextmenu', e=>e.preventDefault());
+
+  canvas.addEventListener('mousemove', e=>{
+    const rect = canvas.getBoundingClientRect();
+    state.inputs.mx = e.clientX - rect.left - rect.width/2;
+    state.inputs.my = e.clientY - rect.top  - rect.height/2;
+  });
+
+  canvas.addEventListener('mousedown', e=>{
+    if (e.button===0) state.inputs.lmb = true;
+    if (e.button===2) state.inputs.rmb = true;
+  });
+  canvas.addEventListener('mouseup', e=>{
+    if (e.button===0) state.inputs.lmb = false;
+    if (e.button===2) state.inputs.rmb = false;
+  });
+
+  // ==============================
+  // Combat
+  // ==============================
+  function tryShoot(p, dt, aiShot=false){
+    const gun = Guns[p.gunKey];
+    if (!gun) return;
+    if (!p.isAI && state.paused) return;
+
+    p.ai.fireCd = Math.max(0, p.ai.fireCd - dt);
+
+    if (p.isAI) {
+      if (p.ai.fireCd>0 || !p.ai.tgt || p.ammo<=0) return;
+    } else {
+      if (!state.inputs.lmb || p.ai.fireCd>0 || p.ammo<=0) return;
+    }
+
+    p.ai.fireCd = 1.0 / gun.fireRate;
+
+    const tx = p.isAI && p.ai.tgt ? p.ai.tgt.x : state.inputs.mx + cam.x;
+    const ty = p.isAI && p.ai.tgt ? p.ai.tgt.y : state.inputs.my + cam.y;
+
+    const extraAI = aiShot ? 0.06 : 0.0;
+    const ang = Math.atan2(ty - p.y, tx - p.x) + (gun.spread ? rand(-(gun.spread+extraAI), (gun.spread+extraAI)) : 0);
+    p.angle = ang;
+
+    const b = {
+      x:p.x, y:p.y,
+      vx: Math.cos(ang) * gun.bulletSpeed,
+      vy: Math.sin(ang) * gun.bulletSpeed,
+      from:p, ttl: 2.5, r: gun.splash?6:3, gl: !!gun.splash, damage: gun.damage
+    };
+    state.bullets.push(b);
+    p.ammo--;
+  }
+
+  function damageEntity(tgt, amount){
+    if (tgt.suit>0){
+      const sDmg = Math.min(tgt.suit, amount);
+      tgt.suit -= sDmg; amount -= sDmg;
+    }
+    if (amount>0) tgt.hp = Math.max(0, tgt.hp - amount);
+  }
+  function explode(x,y,r){ state.explosions.push({x,y,r,ttl:0.25}); }
+
+  // ==============================
+  // AI
+  // ==============================
+  function aiThink(bot, dt){
+    bot.ai.thinkCd = Math.max(0, bot.ai.thinkCd - dt);
+    if (bot.ai.thinkCd>0) return;
+    bot.ai.thinkCd = rand(0.24, 0.38);
+    const candidates = [state.player, ...state.ai.filter(a=>a!==bot)];
+    let best=null, bestD=1e9;
+    for (const c of candidates){
+      if (c.hp<=0) continue;
+      const d = Math.hypot(c.x-bot.x, c.y-bot.y);
+      if (d < bestD){ best = c; bestD = d; }
+    }
+    bot.ai.tgt = best;
+    if (best) bot.angle = Math.atan2(best.y-bot.y, best.x-bot.x);
+  }
+
+  function aiUpdate(bot, dt){
+    if (state.paused) return;
+    aiThink(bot, dt);
+    const scale = state.rules.botSpeedScale;
+    const A = state.rules.aiAccel;
+
+    if ((bot.hp < 50 || bot.suit < 30) && bot.ai.hideTimer <= 0) bot.ai.hideTimer = rand(1.2,2.2);
+    if (bot.ai.hideTimer > 0){
+      bot.ai.hideTimer -= dt;
+      const tang = Math.atan2(bot.y-state.zone.y, bot.x-state.zone.x) + Math.PI/2;
+      bot.vx += Math.cos(tang)*A.wander*scale*dt;
+      bot.vy += Math.sin(tang)*A.wander*scale*dt;
+    }
+
+    if (bot.ammo <= 0){
+      let nearest=null, nd=1e9;
+      for (const l of state.loot){
+        if (l.kind.type==='ammo' || l.kind.type==='gun'){
+          const d=Math.hypot(l.x-bot.x, l.y-bot.y);
+          if (d<nd){ nd=d; nearest=l; }
+        }
+      }
+      if (nearest){
+        const a=Math.atan2(nearest.y-bot.y, nearest.x-bot.x);
+        bot.vx += Math.cos(a)*A.ammoHunt*scale*dt;
+        bot.vy += Math.sin(a)*A.ammoHunt*scale*dt;
+        return;
+      } else {
+        bot.ai.wanderA += rand(-0.3,0.3)*dt;
+        bot.vx += Math.cos(bot.ai.wanderA)*A.wander*scale*dt;
+        bot.vy += Math.sin(bot.ai.wanderA)*A.wander*scale*dt;
+        return;
+      }
+    }
+
+    if (bot.ai.tgt){
+      const zdx = bot.x - state.zone.x, zdy = bot.y - state.zone.y;
+      const zr = Math.hypot(zdx,zdy);
+
+      if (zr > state.zone.r*0.95){
+        const a = Math.atan2(state.zone.y-bot.y, state.zone.x-bot.x);
+        bot.vx += Math.cos(a)*A.zonePush*scale*dt;
+        bot.vy += Math.sin(a)*A.zonePush*scale*dt;
+      } else {
+        const a = Math.atan2(bot.ai.tgt.y-bot.y, bot.ai.tgt.x-bot.x);
+        bot.vx += Math.cos(a)*A.chase*scale*dt;
+        bot.vy += Math.sin(a)*A.chase*scale*dt;
+      }
+
+      const d = Math.hypot(bot.ai.tgt.x-bot.x, bot.ai.tgt.y-bot.y);
+      const engageRange = 460;
+      const hardMaxRange = 680;
+      const inRange = d < engageRange || (d < hardMaxRange && Math.random() < 0.15);
+
+      bot.ai.fireCd = Math.max(0, bot.ai.fireCd - dt);
+      if (bot.ai.fireCd === 0 && Math.random() < 0.20){
+        bot.ai.fireCd = rand(0.12, 0.28);
+      }
+
+      if (inRange && bot.ammo > 0 && hasLineOfSight(bot.x, bot.y, bot.ai.tgt.x, bot.ai.tgt.y)){
+        tryShoot(bot, dt, /*aiShot=*/true);
+      }
+    }
+  }
+
+  // ==============================
+  // Zone
+  // ==============================
+  function updateZone(dt){
+    const z = state.zone;
+    if (state.paused) return;
+    z.phaseTimer -= dt;
+    if (z.phaseTimer <= 0){
+      if (z.targetR <= z.minR){
+        z.targetR = z.minR;
+        z.r = lerp(z.r, z.targetR, 1 - Math.pow(0.001, dt));
+        return;
+      }
+      if (z.phase === 0){
+        z.phase = 1; z.phaseTimer = z.shrinkTime;
+        z.targetR = Math.max(z.minR, z.r * 0.68);
+      } else {
+        z.phase = 0; z.phaseTimer = z.pauseTime;
+      }
+    }
+    if (z.phase === 1){
+      const t = clamp(1 - (z.phaseTimer / z.shrinkTime), 0, 1);
+      z.r = lerp(z.r, z.targetR, t*dt*1.4);
+    }
+  }
+
+  // ==============================
+  // Camera
+  // ==============================
+  const cam = { x:0, y:0 };
+  function updateCamera(dt){
+    cam.x = lerp(cam.x, state.player.x, 0.18);
+    cam.y = lerp(cam.y, state.player.y, 0.18);
+  }
+
+  // ==============================
+  // Init
+  // ==============================
+  state.player = makePlayer(0,0,false);
+  genPlanets();
+  spawnAI(state.rules.startBots);
+  spawnLootBurst(28);
+
+  // ==============================
+  // Loop
+  // ==============================
+  let last = performance.now();
+  function frame(now){
+    // cap mobile FPS a bit to save heat/battery
+    const dt = Math.min(0.033, (now-last)/1000);
+    last = now;
+    if (!state.paused) state.time += dt;
+    step(dt); draw(dt);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ==============================
+  // Step
+  // ==============================
+  function step(dt){
+    if (state.over) return;
+
+    updateZone(dt);
+    if (!state.paused && (state.time - state.rules.lastLootSpawn > state.rules.lootSpawnEvery)){
+      state.rules.lastLootSpawn = state.time;
+      spawnLoot();
+    }
+
+    if (state.paused) { updateHud(); return; }
+
+    // Movement (KB + left stick)
+    const mv = state.inputs.move;
+    mv.x = (keys.KeyD||keys.ArrowRight?1:0) - (keys.KeyA||keys.ArrowLeft?1:0) + (touchState.lx || 0);
+    mv.y = (keys.KeyS||keys.ArrowDown?1:0) - (keys.KeyW||keys.ArrowUp?1:0) + (touchState.ly || 0);
+    // normalize (so KB + stick doesn’t exceed)
+    const mlen = Math.hypot(mv.x,mv.y);
+    if (mlen>1){ mv.x/=mlen; mv.y/=mlen; }
+    const spd = 40;
+    state.player.vx += (mv.x)*spd*dt;
+    state.player.vy += (mv.y)*spd*dt;
+
+    // Aim: mouse or right stick vector
+    let aimX = state.inputs.mx + cam.x;
+    let aimY = state.inputs.my + cam.y;
+    if (touchState.aimActive){
+      // aim from player using right stick delta scaled
+      const scale = 280; // how far to cast aim ray
+      aimX = state.player.x + touchState.rx * scale;
+      aimY = state.player.y + touchState.ry * scale;
+      // auto-fire while stick engaged (and/or Shoot button held)
+      state.inputs.lmb = true;
+    } else if (!touchState.shootHeld) {
+      // if stick not active and shoot button not held, mouse controls fire
+      // keep lmb as set by mouse
+    }
+
+    state.player.angle = Math.atan2(aimY - state.player.y, aimX - state.player.x);
+
+    // Planet contact
+    state.player.onPlanet = !!planetAt(state.player.x, state.player.y);
+
+    // Jet: RMB or Jet button
+    state.inputs.rmb = touchState.jetHeld || state.inputs.rmb;
+
+    const jet = state.player.jet;
+    if (!state.player.onPlanet && state.inputs.rmb && jet.fuel>0){
+      jet.active = true;
+      const thrust = 160;
+      state.player.vx += Math.cos(state.player.angle)*thrust*dt;
+      state.player.vy += Math.sin(state.player.angle)*thrust*dt;
+      jet.fuel = Math.max(0, jet.fuel - dt*0.45);
+    } else {
+      jet.active = false;
+      if (!state.inputs.rmb) jet.fuel = clamp(jet.fuel + dt*0.18, 0, 1 + (state.player.inv.gravite>0?0.5:0));
+    }
+
+    // Shooting
+    if (touchState.shootHeld) state.inputs.lmb = true;
+    tryShoot(state.player, dt);
+
+    // AI
+    for (const bot of state.ai){ if (bot.hp>0) aiUpdate(bot, dt); }
+
+    // Integrate + zone damage
+    const allUnits = [state.player, ...state.ai];
+    for (const u of allUnits){
+      u.vx *= (1-0.08);
+      u.vy *= (1-0.08);
+      const spdMax = Math.hypot(u.vx,u.vy);
+      const maxSpd = u.isAI ? state.rules.aiMaxSpeed : 260;
+      if (spdMax>maxSpd){ u.vx *= maxSpd/spdMax; u.vy *= maxSpd/spdMax; }
+      u.x += u.vx*dt*60;
+      u.y += u.vy*dt*60;
+      const dz = Math.hypot(u.x-state.zone.x, u.y-state.zone.y) - state.zone.r;
+      if (dz>0) damageEntity(u, dz*dt*2);
+    }
+
+    // Pickups
+    function pickup(p){
+      for (let i=state.loot.length-1;i>=0;i--){
+        const L = state.loot[i];
+        L.ttl -= dt; if (L.ttl<=0){ state.loot.splice(i,1); continue; }
+        if (Math.hypot(p.x-L.x, p.y-L.y) < 18){
+          const k = L.kind;
+          if (k.type==='ammo'){
+            const g = Guns[p.gunKey];
+            const add = k.amount;
+            p.ammo = Math.min(g.maxAmmo, p.ammo + add);
+            if (!p.isAI) log(`Picked Ammo +${add}`);
+          } else if (k.type==='gun'){
+            p.gunKey = k.gun;
+            const g = Guns[k.gun];
+            const add = Math.floor(g.maxAmmo/3);
+            p.ammo = Math.min(g.maxAmmo, p.ammo + add);
+            if (!p.isAI) log(`Picked ${g.name}`);
+          } else if (k.type==='nano'){
+            p.inv.nano++; if (!p.isAI) log('Picked NanoInject');
+          } else if (k.type==='wrench'){
+            p.inv.wrench++; if (!p.isAI) log('Picked Wrench');
+          } else if (k.type==='gravite'){
+            p.inv.gravite++; if (!p.isAI) log('Picked Gravite');
+          }
+          state.loot.splice(i,1);
+        }
+      }
+    }
+    pickup(state.player);
+    for (const bot of state.ai) if (bot.hp>0) pickup(bot);
+
+    // Bullets
+    for (let i=state.bullets.length-1;i>=0;i--){
+      const b = state.bullets[i];
+      b.ttl -= dt; if (b.ttl<=0){ state.bullets.splice(i,1); continue; }
+      b.x += b.vx*dt; b.y += b.vy*dt;
+      const targets = [state.player, ...state.ai];
+      for (const t of targets){
+        if (t===b.from || t.hp<=0) continue;
+        if (Math.hypot(t.x-b.x, t.y-b.y) < (t.r + b.r)){
+          if (b.gl){ explode(b.x,b.y, Guns.gl.splash); } else { damageEntity(t, b.damage); }
+          state.bullets.splice(i,1); break;
+        }
+      }
+    }
+
+    // Explosions
+    for (let i=state.explosions.length-1;i>=0;i--){
+      const ex = state.explosions[i];
+      ex.ttl -= dt; if (ex.ttl<=0){ state.explosions.splice(i,1); continue; }
+      const targets = [state.player, ...state.ai];
+      for (const t of targets){
+        const d = Math.hypot(t.x-ex.x, t.y-ex.y);
+        if (d < ex.r){
+          const fall = 1 - (d/ex.r);
+          damageEntity(t, Guns.gl.damage * (0.6 + 0.4*fall));
+        }
+      }
+    }
+
+    // Cleanup AIs
+    for (let i=state.ai.length-1;i>=0;i--){ if (state.ai[i].hp<=0) state.ai.splice(i,1); }
+
+    // Win/Lose
+    if (state.player.hp<=0 && !state.over){ state.over=true; state.win=false; document.getElementById('banner').textContent='DEFEAT'; showEndMenu(); }
+    if (state.ai.length===0 && state.player.hp>0 && !state.over){ state.over=true; state.win=true; document.getElementById('banner').textContent='VICTORY!'; showEndMenu(); }
+
+    updateCamera(dt);
+    updateHud();
+
+    // reset one-frame touch toggles
+    if (!touchState.aimActive && !touchState.shootHeld) state.inputs.lmb = false;
+    if (!touchState.jetHeld) state.inputs.rmb = false;
+  }
+
+  function updateHud(){
+    const p = state.player, z = state.zone, g = Guns[p.gunKey];
+    document.getElementById('hp').textContent   = `HP: ${Math.ceil(p.hp)}`;
+    document.getElementById('suit').textContent = `Suit: ${Math.ceil(p.suit)}`;
+    document.getElementById('gun').textContent  = `Gun: ${g.name}`;
+    document.getElementById('ammo').textContent = `Ammo: ${p.ammo}/${g.maxAmmo}`;
+    document.getElementById('cons').textContent = `NanoInject×${p.inv.nano} | Wrench×${p.inv.wrench} | Gravite×${p.inv.gravite}`;
+    document.getElementById('zone').textContent = `Anomaly: ${z.phase===0?`stable ${z.phaseTimer.toFixed(1)}s`:`shrinking ${z.phaseTimer.toFixed(1)}s`} r=${z.r.toFixed(0)}`;
+    document.getElementById('alive').textContent= `Alive: ${1+state.ai.length}`;
+    document.getElementById('time').textContent = `Time: ${fmtTime(state.time)}`;
+    const pEnt = state.player;
+    useNano.disabled    = !(pEnt.inv.nano   > 0 && pEnt.hp   < pEnt.maxHp);
+    useWrench.disabled  = !(pEnt.inv.wrench > 0 && pEnt.suit < pEnt.maxSuit);
+    useGravite.disabled = !(pEnt.inv.gravite> 0);
+  }
+
+  // ==============================
+  // Draw
+  // ==============================
+  function draw(dt){
+    ctx.clearRect(0,0,view.w,view.h);
+    ctx.save();
+    ctx.translate(view.w/2 - cam.x, view.h/2 - cam.y);
+
+    // Anomaly ring
+    ctx.beginPath(); ctx.strokeStyle='#2a5cff'; ctx.lineWidth=2; ctx.globalAlpha=0.6;
+    ctx.arc(state.zone.x, state.zone.y, state.zone.r, 0, TAU); ctx.stroke(); ctx.globalAlpha=1;
+
+    // Planets
+    for (const p of state.planets){
+      ctx.beginPath(); ctx.fillStyle=p.color; ctx.globalAlpha=0.9;
+      ctx.arc(p.x,p.y,p.r,0,TAU); ctx.fill(); ctx.globalAlpha=1;
+    }
+
+    // Loot
+    for (const L of state.loot){
+      const kind = L.kind;
+      ctx.save();
+      ctx.globalAlpha = clamp(L.ttl, 0.3, 1);
+      ctx.fillStyle = LootViz[kind.type].color;
+      LootViz[kind.type].draw(L.x, L.y, kind);
+      ctx.restore();
+    }
+
+    // Bullets
+    ctx.fillStyle = '#cfe7ff';
+    for (const b of state.bullets){ ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,TAU); ctx.fill(); }
+
+    // Explosions
+    for (const ex of state.explosions){
+      const k = clamp(ex.ttl/0.25,0,1);
+      const rr = Math.max(0, ex.r * k);
+      ctx.beginPath(); ctx.strokeStyle='#ff9a55'; ctx.lineWidth=2; ctx.globalAlpha=0.6*k;
+      ctx.arc(ex.x, ex.y, rr, 0, TAU); ctx.stroke(); ctx.globalAlpha=1;
+    }
+
+    // Units
+    function drawUnit(u, col){
+      ctx.save(); ctx.translate(u.x, u.y); ctx.rotate(u.angle);
+      ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(12,0); ctx.lineTo(-10,7); ctx.lineTo(-10,-7); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      // bars
+      ctx.fillStyle='#1c2e4a'; ctx.fillRect(u.x-10, u.y-18, 20, 3);
+      ctx.fillStyle='#4eb1ff'; ctx.fillRect(u.x-10, u.y-18, 20*(u.suit/u.maxSuit), 3);
+      ctx.fillStyle='#1c2e4a'; ctx.fillRect(u.x-10, u.y-14, 20, 3);
+      ctx.fillStyle='#7cff91'; ctx.fillRect(u.x-10, u.y-14, 20*(u.hp/u.maxHp), 3);
+    }
+    drawUnit(state.player, '#8fd5ff');
+    for (const bot of state.ai){ drawUnit(bot, '#ff8f8f'); }
+
+    ctx.restore();
+  }
+
+  // ==============================
+  // Glyph helpers
+  // ==============================
+  function box(x,y){ ctx.fillRect(x-8,y-8,16,16); }
+  function circle(x,y){ ctx.beginPath(); ctx.arc(x,y,9,0,TAU); ctx.fill(); }
+  function tri(x,y){ ctx.beginPath(); ctx.moveTo(x,y-10); ctx.lineTo(x+9,y+7); ctx.lineTo(x-9,y+7); ctx.closePath(); ctx.fill(); }
+  function hex(x,y){
+    ctx.beginPath();
+    for (let i=0;i<6;i++){
+      const a=i*TAU/6;
+      const px=x+Math.cos(a)*10, py=y+Math.sin(a)*10;
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+  function star(x,y){ ctx.beginPath(); for (let i=0;i<10;i++){ const r=(i%2?5:10); const a=i*TAU/10; const px=x+Math.cos(a)*r, py=y+Math.sin(a)*r; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.closePath(); ctx.fill(); }
+  function glyph(x,y,t){ ctx.fillStyle='#07111f'; ctx.font='10px system-ui,Segoe UI,Roboto,Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,x,y); }
+
+  // ==============================
+  // Consumables (PC + Mobile)
+  // ==============================
+  const useNano    = document.getElementById('useNano');
+  const useWrench  = document.getElementById('useWrench');
+  const useGravite = document.getElementById('useGravite');
+  useNano.addEventListener('click', ()=>{ const p = state.player; if (p.inv.nano<=0 || p.hp>=p.maxHp) return; p.inv.nano--; p.hp = Math.min(p.maxHp, p.hp+40); log('Used NanoInject'); });
+  useWrench.addEventListener('click', ()=>{ const p = state.player; if (p.inv.wrench<=0 || p.suit>=p.maxSuit) return; p.inv.wrench--; p.suit = Math.min(p.maxSuit, p.suit+40); log('Used Wrench'); });
+  useGravite.addEventListener('click', ()=>{ const p = state.player; if (p.inv.gravite<=0) return; p.inv.gravite--; p.jet.cd = 0; p.jet.fuel = Math.min(1.5, p.jet.fuel + 0.5); log('Used Gravite (jet boost)'); });
+
+  // ==============================
+  // Menu wiring
+  // ==============================
+  const menu = document.getElementById('menu');
+  const startBtn = document.getElementById('startBtn');
+  const resumeBtn = document.getElementById('resumeBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const pauseLabel = document.getElementById('pauseLabel');
+
+  function setMenuVisibility(show, showPauseLabel){
+    menu.style.display = show ? 'flex' : 'none';
+    pauseLabel.style.display = show && showPauseLabel ? 'block' : 'none';
+    startBtn.style.display = (!showPauseLabel && show) ? 'inline-block' : 'none';
+    resumeBtn.style.display = (showPauseLabel && show) ? 'inline-block' : 'none';
+  }
+  function showEndMenu(){
+    state.paused = true;
+    setMenuVisibility(true, true);
+    pauseLabel.textContent = (state.win ? 'Victory — Esc to resume (spectate disabled)' : 'Defeat — Esc to retry');
+  }
+  startBtn.addEventListener('click', ()=>{ state.paused = false; setMenuVisibility(false, false); last = performance.now(); });
+  resumeBtn.addEventListener('click', ()=>{ if (!state.over){ state.paused = false; setMenuVisibility(false, true); last = performance.now(); }});
+  restartBtn.addEventListener('click', ()=>location.reload());
+  setMenuVisibility(true, false);
+
+  // ==============================
+  // Touch Controls
+  // ==============================
+  const touchLayer = document.getElementById('touch');
+  const leftArea = document.getElementById('leftStick');
+  const rightArea = document.getElementById('rightStick');
+  const leftKnob = document.getElementById('leftKnob');
+  const rightKnob = document.getElementById('rightKnob');
+  const btnShoot = document.getElementById('btnShoot');
+  const btnJet   = document.getElementById('btnJet');
+  const btnNano  = document.getElementById('btnNano');
+  const btnWrench= document.getElementById('btnWrench');
+  const btnGrav  = document.getElementById('btnGrav');
+
+  // show/hide touch layer at runtime if device changes
+  function updateTouchVisibility(){
+    const coarse = matchMedia('(pointer:coarse)').matches;
+    touchLayer.style.display = coarse ? 'block' : 'none';
+  }
+  updateTouchVisibility();
+  addEventListener('resize', updateTouchVisibility);
+
+  const touchState = {
+    leftId:null, rightId:null,
+    lx:0, ly:0, rx:0, ry:0,
+    aimActive:false, shootHeld:false, jetHeld:false
+  };
+
+  function normStick(x,y,cx,cy,limit){
+    const dx = x - cx, dy = y - cy;
+    const d = Math.hypot(dx,dy);
+    const nx = d ? dx/d : 0, ny = d ? dy/d : 0;
+    const m = Math.min(d/limit, 1);
+    return {nx:nx*m, ny:ny*m, dx:dx, dy:dy, d:m};
+  }
+
+  function bindStick(area, knob, side){
+    const radius = 70; // knob travel radius
+    let center = {x:0,y:0};
+
+    function getLocal(e){
+      const r = area.getBoundingClientRect();
+      const t = e.changedTouches ? e.changedTouches[0] : e;
+      return { x: t.clientX - r.left, y: t.clientY - r.top };
+    }
+
+    area.addEventListener('touchstart', (e)=>{
+      e.preventDefault();
+      for (const t of e.changedTouches){
+        // assign if free or same side
+        if (side==='left' && touchState.leftId===null){
+          touchState.leftId = t.identifier;
+          const p = getLocal(e);
+          center = { x: area.clientWidth/2, y: area.clientHeight/2 };
+          const v = normStick(p.x, p.y, center.x, center.y, radius);
+          touchState.lx = v.nx; touchState.ly = v.ny;
+          knob.style.left = (center.x + v.nx*radius) + 'px';
+          knob.style.top  = (center.y + v.ny*radius) + 'px';
+        } else if (side==='right' && touchState.rightId===null){
+          touchState.rightId = t.identifier;
+          const p = getLocal(e);
+          center = { x: area.clientWidth/2, y: area.clientHeight/2 };
+          const v = normStick(p.x, p.y, center.x, center.y, radius);
+          touchState.rx = v.nx; touchState.ry = v.ny;
+          touchState.aimActive = v.d > 0.05;
+          knob.style.left = (center.x + v.nx*radius) + 'px';
+          knob.style.top  = (center.y + v.ny*radius) + 'px';
+        }
+      }
+    }, {passive:false});
+
+    area.addEventListener('touchmove', (e)=>{
+      e.preventDefault();
+      for (const t of e.changedTouches){
+        if (side==='left' && t.identifier===touchState.leftId){
+          const p = getLocal(e);
+          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
+          touchState.lx = v.nx; touchState.ly = v.ny;
+          knob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
+          knob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
+        }
+        if (side==='right' && t.identifier===touchState.rightId){
+          const p = getLocal(e);
+          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
+          touchState.rx = v.nx; touchState.ry = v.ny;
+          touchState.aimActive = v.d > 0.05;
+          knob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
+          knob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
+        }
+      }
+    }, {passive:false});
+
+    function reset(side){
+      if (side==='left'){
+        touchState.leftId=null; touchState.lx=0; touchState.ly=0;
+      } else {
+        touchState.rightId=null; touchState.rx=0; touchState.ry=0; touchState.aimActive=false;
+      }
+      knob.style.left = '50%'; knob.style.top = '50%';
+    }
+
+    area.addEventListener('touchend', (e)=>{ e.preventDefault(); for (const t of e.changedTouches){ if (side==='left' && t.identifier===touchState.leftId) reset('left'); if (side==='right' && t.identifier===touchState.rightId) reset('right'); } }, {passive:false});
+    area.addEventListener('touchcancel', (e)=>{ e.preventDefault(); for (const t of e.changedTouches){ if (side==='left' && t.identifier===touchState.leftId) reset('left'); if (side==='right' && t.identifier===touchState.rightId) reset('right'); } }, {passive:false});
+  }
+  bindStick(leftArea, leftKnob, 'left');
+  bindStick(rightArea, rightKnob, 'right');
+
+  // Buttons (touch)
+  function bindHold(btn, on, off){
+    let holding=false;
+    btn.addEventListener('touchstart', (e)=>{ e.preventDefault(); holding=true; on(); }, {passive:false});
+    btn.addEventListener('touchend',   (e)=>{ e.preventDefault(); holding=false; off(); }, {passive:false});
+    btn.addEventListener('touchcancel',(e)=>{ e.preventDefault(); holding=false; off(); }, {passive:false});
+    // also support mouse just in case
+    btn.addEventListener('mousedown', ()=>{ holding=true; on(); });
+    addEventListener('mouseup', ()=>{ if(holding){ holding=false; off(); }});
+  }
+
+  bindHold(btnShoot, ()=>{ touchState.shootHeld=true; state.inputs.lmb=true; }, ()=>{ touchState.shootHeld=false; state.inputs.lmb=false; });
+  bindHold(btnJet,   ()=>{ touchState.jetHeld=true;  state.inputs.rmb=true; }, ()=>{ touchState.jetHeld=false; state.inputs.rmb=false; });
+
+  // Item buttons just call the same handlers
+  btnNano.addEventListener('touchstart', (e)=>{ e.preventDefault(); document.getElementById('useNano').click(); }, {passive:false});
+  btnWrench.addEventListener('touchstart',(e)=>{ e.preventDefault(); document.getElementById('useWrench').click(); }, {passive:false});
+  btnGrav.addEventListener('touchstart',  (e)=>{ e.preventDefault(); document.getElementById('useGravite').click(); }, {passive:false});
+
+  // Prevent pinch zoom / pull-to-refresh while playing
+  addEventListener('touchmove', (e)=>{ if (matchMedia('(pointer:coarse)').matches) e.preventDefault(); }, {passive:false});
+
+  // ==============================
+  // Helpers
+  // ==============================
+  function planetAt(x,y){
+    for (const p of state.planets){
+      if (Math.hypot(x-p.x, y-p.y) <= p.r + 12) return p;
+    }
+    return null;
+  }
+  function fmtTime(t){ const s=Math.floor(t%60), m=Math.floor(t/60); return `${m}:${s.toString().padStart(2,'0')}`; }
+
+  // ==============================
+  // Sanity Checks
+  // ==============================
+  console.assert(Guns.pistol.fireRate !== Guns.smg.fireRate && Guns.smg.fireRate !== Guns.rifle.fireRate && Guns.gl.fireRate !== Guns.pistol.fireRate, 'distinct fire rates');
+  (function(){
+    const gunW = WeightedLoot.filter(e=>e.value.type==='gun').reduce((s,e)=>s+e.w,0);
+    const otherW = WeightedLoot.filter(e=>e.value.type!=='gun').reduce((s,e)=>s+e.w,0);
+    console.assert(otherW > gunW, 'non-weapon loot weighted more');
+  })();
+})();
+</script>
+</body>
+</html>
