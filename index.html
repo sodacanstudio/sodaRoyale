@@ -181,6 +181,49 @@
   }
 
   // ==============================
+  // Sound System
+  // ==============================
+  const AudioKit = (() => {
+    let enabled = false; // flipped on start to satisfy mobile autoplay rules
+
+    // small pool for rapid-fire
+    const makePool = (src, n=5, vol=0.55) => {
+      const pool = new Array(n).fill(0).map(()=>{ const a = new Audio(src); a.preload='auto'; a.volume = vol; return a; });
+      let i = 0;
+      return () => {
+        if (!enabled) return;
+        const a = pool[i=(i+1)%pool.length];
+        try { a.currentTime = 0; a.play(); } catch {}
+      };
+    };
+
+    const oneShot = (src, vol=0.65) => {
+      const a = new Audio(src); a.preload='auto'; a.volume = vol;
+      return () => { if (!enabled) return; try { a.currentTime = 0; a.play(); } catch {} };
+    };
+
+    const kit = {
+      // filenames to add beside the HTML:
+      // shoot.wav, pickup.wav, zone_warning.wav, death.wav, victory.wav
+      playShoot: makePool('shoot.wav', 6, 0.55),
+      playPickup: oneShot('pickup.wav', 0.6),
+      playZone: oneShot('zone_warning.wav', 0.5),
+      playDeath: oneShot('death.wav', 0.7),
+      playVictory: oneShot('victory.wav', 0.7),
+      enable: () => { enabled = true; },
+      disable: () => { enabled = false; }
+    };
+
+    // warm the pool a tiny bit after enabling (silently) to reduce first-play lag
+    kit.prime = () => {
+      kit.enable();
+      setTimeout(()=>{ kit.playShoot(); }, 0); // quick tap
+    };
+
+    return kit;
+  })();
+
+  // ==============================
   // Game State
   // ==============================
   const state = {
@@ -195,7 +238,8 @@
     loot: [],
     planets: [],
     inputs: { mx:0, my:0, lmb:false, rmb:false, keys:{}, move:{x:0,y:0}, shootHeld:false, jetHeld:false },
-    zone: { x:0, y:0, r:3000, targetR:3000, phase:0, phaseTimer:18, shrinkTime:28, pauseTime:14, minR:28 },
+    zone: { x:0, y:0, r:3000, targetR:3000, phase:0, phaseTimer:18, shrinkTime:28, pauseTime:14, minR:28,
+            nearEdge:false, zonePingCd:0 },
     rules: {
       startBots: 50,
       lootSpawnEvery: 2.5,
@@ -400,6 +444,9 @@
     };
     state.bullets.push(b);
     p.ammo--;
+
+    // SOUND: shooting (player only)
+    if (!p.isAI) AudioKit.playShoot();
   }
 
   function damageEntity(tgt, amount){
@@ -502,6 +549,10 @@
   // ==============================
   function updateZone(dt){
     const z = state.zone;
+
+    // cooldown timer for zone edge ping
+    z.zonePingCd = Math.max(0, z.zonePingCd - dt);
+
     z.phaseTimer -= dt;
     if (z.phaseTimer <= 0){
       if (z.targetR <= z.minR){
@@ -520,6 +571,18 @@
       const t = clamp(1 - (z.phaseTimer / z.shrinkTime), 0, 1);
       z.r = lerp(z.r, z.targetR, t*dt*1.4);
     }
+
+    // Near-edge detection -> play gentle warning ping
+    const px = state.player.x - z.x, py = state.player.y - z.y;
+    const dist = Math.hypot(px, py);
+    const edgeThreshold = z.r * 0.90; // within 10% of edge
+    const nearNow = dist >= edgeThreshold || dist > z.r; // near or outside
+
+    if (nearNow && z.zonePingCd === 0){
+      AudioKit.playZone();
+      z.zonePingCd = 2.0; // throttle pings
+    }
+    z.nearEdge = nearNow;
   }
 
   // ==============================
@@ -662,6 +725,10 @@
           } else if (k.type==='gravite'){
             p.inv.gravite++; if (!p.isAI) log('Picked Gravite');
           }
+
+          // SOUND: pickup (player only)
+          if (!p.isAI) AudioKit.playPickup();
+
           state.loot.splice(i,1);
         }
       }
@@ -704,10 +771,12 @@
     // Win/Lose
     if (state.player.hp<=0 && !state.over){
       state.over=true; state.win=false; document.getElementById('banner').textContent='DEFEAT';
+      AudioKit.playDeath();
       btnRestart.style.display='block';
     }
     if (state.ai.length===0 && state.player.hp>0 && !state.over){
       state.over=true; state.win=true; document.getElementById('banner').textContent='VICTORY!';
+      AudioKit.playVictory();
       btnRestart.style.display='block';
     }
 
@@ -849,6 +918,9 @@
     menu.style.display = 'none';
     setMobileHidden(false);
     log('Match started');
+
+    // unlock / prime audio (mobile friendly)
+    AudioKit.prime();
   }
   startBtn.addEventListener('click', startMatch);
 
@@ -869,6 +941,7 @@
     state.zone.r = 3000; state.zone.targetR = 3000;
     state.zone.phase = 0; state.zone.phaseTimer = 18;
     state.zone.shrinkTime = 28; state.zone.pauseTime = 14; state.zone.minR = 28;
+    state.zone.nearEdge = false; state.zone.zonePingCd = 0;
 
     // New player + world
     state.player = makePlayer(0,0,false);
@@ -883,6 +956,9 @@
     // Keep playing (no menu)
     state.started = true;
     log('Match restarted');
+
+    // keep audio enabled between rounds
+    AudioKit.enable();
   }
   btnRestart.addEventListener('click', resetMatch);
 
