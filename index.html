@@ -338,6 +338,7 @@
   canvas.addEventListener('mousedown', e=>{
     state.inputs.lmb = (e.button===0);
     state.inputs.rmb = (e.button===2);
+    inputMode.mouseActiveTimer = 1.0; // keep PC click responsive even after idle
   });
   canvas.addEventListener('mouseup', e=>{
     if (e.button===0) state.inputs.lmb = false;
@@ -779,7 +780,16 @@
   function circle(x,y){ ctx.beginPath(); ctx.arc(x,y,9,0,TAU); ctx.fill(); }
   function tri(x,y){ ctx.beginPath(); ctx.moveTo(x,y-10); ctx.lineTo(x+9,y+7); ctx.lineTo(x-9,y+7); ctx.closePath(); ctx.fill(); }
   function hex(x,y){ ctx.beginPath(); for (let i=0;i<6;i++){ const a=i*TAU/6; const px=x+Math.cos(a)*10, py=y+Math.sin(a)*10; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.closePath(); ctx.fill(); }
-  function star(x,y){ ctx.beginPath(); for (let i=0;i<10;i++){ const r=(i%2?5:10); const a=i*TAU/10; const px=x+Math.cos(a)*r, py=y+Math.sin(a)*r; i?ctx.lineTo(px,py):ctx.MoveTo(px,py); } ctx.closePath(); ctx.fill(); }
+  function star(x,y){
+    ctx.beginPath();
+    for (let i=0;i<10;i++){
+      const r=(i%2?5:10);
+      const a=i*TAU/10;
+      const px=x+Math.cos(a)*r, py=y+Math.sin(a)*r;
+      i ? ctx.lineTo(px,py) : ctx.moveTo(px,py); // <-- fixed moveTo
+    }
+    ctx.closePath(); ctx.fill();
+  }
   function glyph(x,y,t){ ctx.fillStyle='#07111f'; ctx.font='10px system-ui,Segoe UI,Roboto,Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,x,y); }
 
   // ==============================
