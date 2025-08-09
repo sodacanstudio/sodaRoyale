@@ -2,82 +2,84 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SODA Royale</title>
   <style>
-    html, body { margin:0; padding:0; background:#05070b; color:#cfe7ff; font:14px/1.45 system-ui, Segoe UI, Roboto, Arial; height:100%; overscroll-behavior:none; }
+    html, body { margin:0; padding:0; background:#05070b; color:#cfe7ff; font:14px/1.45 system-ui, Segoe UI, Roboto, Arial; touch-action:none; }
     #ui { position:fixed; inset:0 0 auto 0; padding:8px 10px; display:flex; gap:12px; align-items:center;
-          background:linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,0)); user-select:none; pointer-events:none; }
-    #ui .btn { pointer-events:auto; }
+          background:linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,0)); user-select:none; z-index:10 }
     #hud { display:flex; gap:14px; align-items:center; flex-wrap:wrap }
     .chip { padding:4px 8px; border-radius:8px; background:#0e1622; border:1px solid #1b2940; }
     .btn { padding:4px 8px; border-radius:6px; background:#112033; border:1px solid #1c3355; color:#cfe7ff; cursor:pointer; }
     .btn[disabled] { opacity:.4; cursor:not-allowed; }
-    #log { position:fixed; right:8px; top:40px; width:320px; max-height:44vh; overflow:auto; font-size:12px; opacity:.85; }
+    #log { position:fixed; right:8px; top:40px; width:320px; max-height:44vh; overflow:auto; font-size:12px; opacity:.85; z-index:9 }
     #log div { margin:0 0 6px; padding:6px 8px; background:#0b1220; border:1px solid #14233d; border-radius:8px; }
-    canvas { display:block; width:100vw; height:100vh; touch-action:none; }
-    #banner { position:fixed; inset:auto 0 40% 0; text-align:center; font-size:28px; font-weight:700; letter-spacing:1px; text-shadow:0 2px 10px #000; }
+    canvas { display:block; width:100vw; height:100vh; }
 
-    /* --- Main Menu / Pause Overlay --- */
+    #banner { position:fixed; inset:auto 0 40% 0; text-align:center; font-size:28px; font-weight:700; letter-spacing:1px; text-shadow:0 2px 10px #000; z-index:8 }
+
+    /* Main menu */
     #menu {
       position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      background:linear-gradient(180deg, rgba(5,7,11,.92), rgba(5,7,11,.75));
-      backdrop-filter: blur(4px);
+      background:radial-gradient(1200px 800px at 50% 30%, rgba(20,40,80,.35), rgba(0,0,0,.85));
+      z-index:100; pointer-events:auto;
     }
-    #menuCard {
-      width:min(720px, 92vw);
-      border:1px solid #1b2940; border-radius:14px; background:#0c1421; padding:18px;
-      box-shadow: 0 8px 40px rgba(0,0,0,.45);
+    #menu .panel{
+      width:min(720px,92vw); padding:22px; border-radius:16px; background:#0b1320ee; border:1px solid #1a2b4a;
+      box-shadow:0 10px 40px rgba(0,0,0,.45);
     }
-    #menu h1 { margin:0 0 10px 0; font-size:28px; letter-spacing:.5px; }
-    #menu .sub { opacity:.8; margin-bottom:14px }
-    #menu .grid { display:grid; grid-template-columns: 1.1fr .9fr; gap:14px; }
-    #menu .panel { background:#0e1622; border:1px solid #1c2a46; border-radius:12px; padding:12px; }
-    #menu ul { margin:8px 0 0; padding-left:18px; line-height:1.6; }
-    #menu .row { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; }
-    #menu .big { padding:10px 14px; border-radius:10px; font-weight:600; }
-    #menu .ghost { background:transparent; }
-    #menu .titleRow { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-    #pauseLabel { font-size:14px; opacity:.8; }
+    #menu h1{ margin:0 0 12px; font-size:28px; letter-spacing:.5px }
+    #menu h2{ margin:16px 0 8px; font-size:16px; opacity:.85 }
+    #menu .row{ display:flex; gap:12px; flex-wrap:wrap }
+    #menu .grow{ flex:1 }
+    #menu .start{ font-size:16px; padding:10px 14px; border-radius:10px; background:#18406d; border:1px solid #295a91; cursor:pointer }
+    #menu .start:hover{ background:#1b4e87 }
+    #menu kbd{ background:#0f1b2d; border:1px solid #1c2f4f; padding:2px 6px; border-radius:6px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px }
 
-    /* --- Touch Controls (show on mobile, hide on desktop) --- */
-    #touch {
-      position:fixed; inset:0; pointer-events:none; touch-action:none;
-      display:none; /* managed by JS */
+    /* Mobile controls */
+    .mobileOnly{ position:fixed; z-index:50; display:none; }
+    .touch-btn{ touch-action:none; -webkit-user-select:none; user-select:none; background:#112033d0; border:1px solid #1c3355; color:#cfe7ff; border-radius:12px; padding:10px 14px; font-weight:700; }
+    .joystick{ width:120px; height:120px; border-radius:60px; background:#0e1622a0; border:1px solid #1b2940; touch-action:none; }
+    .stick{ position:absolute; width:56px; height:56px; border-radius:28px; background:#1a2a42; border:1px solid #274168; transform:translate(-50%,-50%); left:50%; top:50%; pointer-events:none; }
+    /* Show on coarse pointer (touch). Hidden on desktop */
+    @media (pointer:coarse){
+      .mobileOnly{ display:block; }
     }
-    .stickArea {
-      position:absolute; width:42vw; height:42vh; max-width:420px; max-height:420px;
-      pointer-events:auto; touch-action:none; border-radius:18px;
-      background:rgba(8,12,20,.06); border:1px solid rgba(28,42,70,.5);
-    }
-    #leftStick { left:12px; bottom:12px; }
-    #rightStick { right:12px; bottom:12px; }
-    .stick {
-      position:absolute; width:88px; height:88px; border-radius:50%;
-      background:rgba(25,50,85,.7); border:2px solid rgba(95,155,255,.9);
-      transform:translate(-50%,-50%); left:50%; top:50%;
-    }
-    .stick.knob { width:62px; height:62px; background:rgba(140,200,255,.9); border:0; mix-blend-mode:screen; }
-    .padBtn {
-      position:absolute; pointer-events:auto; touch-action:none;
-      padding:10px 14px; border-radius:12px; font-weight:700; border:1px solid #1c3355; background:#112033; color:#cfe7ff;
-      box-shadow:0 6px 20px rgba(0,0,0,.35);
-    }
-    #btnShoot { right:18px; bottom:48vh; }
-    #btnJet   { right:18px; bottom:58vh; }
-    #btnNano  { right:18px; bottom:18px; }
-    #btnWrench{ right:98px; bottom:18px; }
-    #btnGrav  { right:178px; bottom:18px; }
 
-    @media (pointer:coarse) {
-      #log { display:none; }           /* keep it clean on mobile */
-      #ui { font-size:12px; gap:8px; } /* compact HUD */
-      .chip { padding:3px 6px; }
-      .btn { padding:6px 8px; }
-    }
+    /* Hide mobile controls while menu open */
+    .hideDuringMenu{ pointer-events:none; opacity:0; }
+
   </style>
 </head>
 <body>
+  <!-- MAIN MENU -->
+  <div id="menu">
+    <div class="panel">
+      <h1>SODA Royale</h1>
+      <div class="row">
+        <button id="startBtn" class="start">Start Match</button>
+        <div class="grow"></div>
+      </div>
+      <h2>Controls</h2>
+      <div class="row">
+        <div class="grow">
+          <div><strong>PC</strong></div>
+          <div>Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>←↑→↓</kbd></div>
+          <div>Aim: Mouse</div>
+          <div>Shoot: <kbd>LMB</kbd> (hold for auto)</div>
+          <div>Jetpack: <kbd>RMB</kbd> (hold)</div>
+        </div>
+        <div class="grow">
+          <div><strong>Mobile</strong></div>
+          <div>Left joystick: Move</div>
+          <div>Right joystick: Look (no auto-shoot)</div>
+          <div><span class="touch-btn" style="padding:2px 8px">SHOOT</span> to fire (hold)</div>
+          <div><span class="touch-btn" style="padding:2px 8px">JET</span> to thrust (hold)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="ui">
     <div id="hud">
       <span class="chip" id="hp">HP: 100</span>
@@ -85,74 +87,29 @@
       <span class="chip" id="gun">Gun: -</span>
       <span class="chip" id="ammo">Ammo: 0</span>
       <span class="chip" id="cons">NanoInject×0 | Wrench×0 | Gravite×0</span>
-      <span class="chip" id="zone">Anomaly: stable</span>
+      <span class="chip" id="zone">Zone: stable</span>
       <span class="chip" id="alive">Alive: -</span>
       <span class="chip" id="time">Time: 0:00</span>
     </div>
     <div style="flex:1"></div>
-    <!-- PC buttons; mobile has its own -->
     <button class="btn" id="useNano">Use Nano</button>
     <button class="btn" id="useWrench">Use Wrench</button>
     <button class="btn" id="useGravite">Use Gravite</button>
-  </div>
-
-  <!-- Main Menu / Pause Overlay -->
-  <div id="menu">
-    <div id="menuCard">
-      <div class="titleRow">
-        <h1>SODA Royale</h1>
-        <div id="pauseLabel" style="display:none;">Paused (Esc to resume)</div>
-      </div>
-      <div class="sub">Last one alive wins. Loot up, mind the planets, and don’t get caught in the anomaly field.</div>
-      <div class="grid">
-        <div class="panel">
-          <h3 style="margin:0 0 6px">Controls</h3>
-          <ul>
-            <li><b>Move:</b> WASD / Arrow Keys / Left Stick</li>
-            <li><b>Aim:</b> Mouse / Right Stick</li>
-            <li><b>Shoot:</b> Hold Left Mouse / Hold Right Stick / Shoot Button</li>
-            <li><b>Jetpack (spacewalk only):</b> Hold Right Mouse / Jet Button</li>
-            <li><b>Use Items:</b> Buttons</li>
-            <li><b>Pause / Resume:</b> Esc</li>
-          </ul>
-        </div>
-        <div class="panel">
-          <h3 style="margin:0 0 6px">Tips</h3>
-          <ul>
-            <li>Planets block line of sight and bullets.</li>
-            <li>Ammo is scarce early—grab drops.</li>
-            <li>Anomaly hurts more the further out you are.</li>
-          </ul>
-        </div>
-      </div>
-      <div class="row">
-        <button id="restartBtn" class="btn ghost big">Restart</button>
-        <button id="resumeBtn" class="btn big" style="display:none;">Resume</button>
-        <button id="startBtn" class="btn big">Play</button>
-      </div>
-    </div>
   </div>
 
   <div id="log"></div>
   <div id="banner"></div>
   <canvas id="c"></canvas>
 
-  <!-- Touch Controls Layer -->
-  <div id="touch" aria-hidden="true">
-    <div id="leftStick" class="stickArea">
-      <div class="stick base"></div>
-      <div class="stick knob" id="leftKnob"></div>
-    </div>
-    <div id="rightStick" class="stickArea">
-      <div class="stick base"></div>
-      <div class="stick knob" id="rightKnob"></div>
-    </div>
-    <button id="btnShoot" class="padBtn">Shoot</button>
-    <button id="btnJet"   class="padBtn">Jet</button>
-    <button id="btnNano"  class="padBtn">Nano</button>
-    <button id="btnWrench"class="padBtn">Wrench</button>
-    <button id="btnGrav"  class="padBtn">Gravite</button>
+  <!-- MOBILE CONTROLS -->
+  <div id="joyMove" class="mobileOnly joystick" style="left:18px; bottom:18px;">
+    <div class="stick"></div>
   </div>
+  <div id="joyLook" class="mobileOnly joystick" style="right:18px; bottom:18px;">
+    <div class="stick"></div>
+  </div>
+  <button id="btnShoot" class="mobileOnly touch-btn" style="right:20px; bottom:160px;">SHOOT</button>
+  <button id="btnJet"   class="mobileOnly touch-btn" style="right:120px; bottom:160px;">JET</button>
 
 <script>
 (() => {
@@ -182,6 +139,7 @@
     const dx = px - cx, dy = py - cy;
     return (dx*dx + dy*dy) <= r*r;
   }
+
   function hasLineOfSight(ax,ay,bx,by){
     for (const p of state.planets){
       if (segmentHitsCircle(ax,ay,bx,by,p.x,p.y,p.r)) return false;
@@ -194,6 +152,7 @@
   // ==============================
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d', { alpha: true });
+
   const view = { w:0, h:0, dpr:1 };
   function resize(){
     view.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -201,7 +160,7 @@
     view.h = Math.floor(innerHeight);
     canvas.width  = Math.floor(view.w * view.dpr);
     canvas.height = Math.floor(view.h * view.dpr);
-    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0); // draw in CSS px
   }
   addEventListener('resize', resize); resize();
 
@@ -221,17 +180,17 @@
   // ==============================
   const state = {
     time: 0,
-    paused: true,
     over: false,
     win: false,
+    started: false,
     player: null,
     ai: [],
     bullets: [],
     explosions: [],
     loot: [],
     planets: [],
-    inputs: { mx:0, my:0, lmb:false, rmb:false, keys:{}, move:{x:0,y:0}, mouse:{lmb:false, rmb:false} },
-    zone: { x:0, y:0, r:3000, targetR:3000, phase:0, phaseTimer:14, shrinkTime:26, pauseTime:12, minR:28 },
+    inputs: { mx:0, my:0, lmb:false, rmb:false, keys:{}, move:{x:0,y:0}, shootHeld:false, jetHeld:false },
+    zone: { x:0, y:0, r:3000, targetR:3000, phase:0, phaseTimer:18, shrinkTime:28, pauseTime:14, minR:28 }, // slightly faster shrink
     rules: {
       startBots: 50,
       lootSpawnEvery: 2.5,
@@ -359,41 +318,28 @@
   }
 
   // ==============================
-  // Input (KB/M + Pause)
+  // Input
   // ==============================
   const keys = state.inputs.keys;
-  addEventListener('keydown', e=>{
-    keys[e.code]=true;
-    if (e.code === 'Escape'){
-      if (!state.over){
-        state.paused = !state.paused;
-        setMenuVisibility(state.paused, /*pausedLabel*/ true);
-        last = performance.now();
-        updateTouchVisibility(); // keep joysticks off while paused/menu
-      }
-    }
-  }, {passive:true});
-  addEventListener('keyup',   e=>{ keys[e.code]=false; }, {passive:true});
-  addEventListener('blur', ()=>{
-    state.inputs.mouse.lmb = false;
-    state.inputs.mouse.rmb = false;
-    state.inputs.lmb = false;
-    state.inputs.rmb = false;
-  }, {passive:true});
+  addEventListener('keydown', e=>{ if (!state.started && e.code==='Enter') startMatch(); keys[e.code]=true; });
+  addEventListener('keyup',   e=>{ keys[e.code]=false; });
+  addEventListener('blur', ()=>{ state.inputs.lmb=false; state.inputs.rmb=false; });
+
   addEventListener('contextmenu', e=>e.preventDefault());
 
+  // Mouse aiming relative to canvas center
   canvas.addEventListener('mousemove', e=>{
     const rect = canvas.getBoundingClientRect();
     state.inputs.mx = e.clientX - rect.left - rect.width/2;
     state.inputs.my = e.clientY - rect.top  - rect.height/2;
   });
   canvas.addEventListener('mousedown', e=>{
-    if (e.button===0) state.inputs.mouse.lmb = true;
-    if (e.button===2) state.inputs.mouse.rmb = true;
+    if (e.button===0) state.inputs.lmb = true;
+    if (e.button===2) state.inputs.rmb = true;
   });
   canvas.addEventListener('mouseup', e=>{
-    if (e.button===0) state.inputs.mouse.lmb = false;
-    if (e.button===2) state.inputs.mouse.rmb = false;
+    if (e.button===0) state.inputs.lmb = false;
+    if (e.button===2) state.inputs.rmb = false;
   });
 
   // ==============================
@@ -402,14 +348,13 @@
   function tryShoot(p, dt, aiShot=false){
     const gun = Guns[p.gunKey];
     if (!gun) return;
-    if (!p.isAI && state.paused) return;
-
     p.ai.fireCd = Math.max(0, p.ai.fireCd - dt);
 
     if (p.isAI) {
       if (p.ai.fireCd>0 || !p.ai.tgt || p.ammo<=0) return;
     } else {
-      if (!state.inputs.lmb || p.ai.fireCd>0 || p.ammo<=0) return;
+      const wantsToShoot = state.inputs.lmb || state.inputs.shootHeld; // PC or mobile
+      if (!wantsToShoot || p.ai.fireCd>0 || p.ammo<=0) return;
     }
 
     p.ai.fireCd = 1.0 / gun.fireRate;
@@ -438,6 +383,7 @@
     }
     if (amount>0) tgt.hp = Math.max(0, tgt.hp - amount);
   }
+
   function explode(x,y,r){ state.explosions.push({x,y,r,ttl:0.25}); }
 
   // ==============================
@@ -459,11 +405,9 @@
   }
 
   function aiUpdate(bot, dt){
-    if (state.paused) return;
     aiThink(bot, dt);
     const scale = state.rules.botSpeedScale;
     const A = state.rules.aiAccel;
-
     if ((bot.hp < 50 || bot.suit < 30) && bot.ai.hideTimer <= 0) bot.ai.hideTimer = rand(1.2,2.2);
     if (bot.ai.hideTimer > 0){
       bot.ai.hideTimer -= dt;
@@ -471,7 +415,6 @@
       bot.vx += Math.cos(tang)*A.wander*scale*dt;
       bot.vy += Math.sin(tang)*A.wander*scale*dt;
     }
-
     if (bot.ammo <= 0){
       let nearest=null, nd=1e9;
       for (const l of state.loot){
@@ -492,11 +435,9 @@
         return;
       }
     }
-
     if (bot.ai.tgt){
       const zdx = bot.x - state.zone.x, zdy = bot.y - state.zone.y;
       const zr = Math.hypot(zdx,zdy);
-
       if (zr > state.zone.r*0.95){
         const a = Math.atan2(state.zone.y-bot.y, state.zone.x-bot.x);
         bot.vx += Math.cos(a)*A.zonePush*scale*dt;
@@ -506,17 +447,14 @@
         bot.vx += Math.cos(a)*A.chase*scale*dt;
         bot.vy += Math.sin(a)*A.chase*scale*dt;
       }
-
       const d = Math.hypot(bot.ai.tgt.x-bot.x, bot.ai.tgt.y-bot.y);
       const engageRange = 460;
       const hardMaxRange = 680;
       const inRange = d < engageRange || (d < hardMaxRange && Math.random() < 0.15);
-
       bot.ai.fireCd = Math.max(0, bot.ai.fireCd - dt);
       if (bot.ai.fireCd === 0 && Math.random() < 0.20){
         bot.ai.fireCd = rand(0.12, 0.28);
       }
-
       if (inRange && bot.ammo > 0 && hasLineOfSight(bot.x, bot.y, bot.ai.tgt.x, bot.ai.tgt.y)){
         tryShoot(bot, dt, /*aiShot=*/true);
       }
@@ -524,11 +462,20 @@
   }
 
   // ==============================
+  // Planets / Ground contact
+  // ==============================
+  function planetAt(x,y){
+    for (const p of state.planets){
+      if (Math.hypot(x-p.x, y-p.y) <= p.r + 12) return p;
+    }
+    return null;
+  }
+
+  // ==============================
   // Zone
   // ==============================
   function updateZone(dt){
     const z = state.zone;
-    if (state.paused) return;
     z.phaseTimer -= dt;
     if (z.phaseTimer <= 0){
       if (z.targetR <= z.minR){
@@ -536,10 +483,10 @@
         z.r = lerp(z.r, z.targetR, 1 - Math.pow(0.001, dt));
         return;
       }
-      if (z.phase === 0){
+      if (z.phase === 0){ // start shrinking
         z.phase = 1; z.phaseTimer = z.shrinkTime;
         z.targetR = Math.max(z.minR, z.r * 0.68);
-      } else {
+      } else { // pause
         z.phase = 0; z.phaseTimer = z.pauseTime;
       }
     }
@@ -572,181 +519,57 @@
   let last = performance.now();
   function frame(now){
     const dt = Math.min(0.033, (now-last)/1000);
-    last = now;
-    if (!state.paused) state.time += dt;
+    last = now; if (state.started) state.time += dt;
     step(dt); draw(dt);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 
   // ==============================
-  // Touch Controls (setup early so we can combine with mouse)
-  // ==============================
-  const touchLayer = document.getElementById('touch');
-  const leftArea = document.getElementById('leftStick');
-  const rightArea = document.getElementById('rightStick');
-  const leftKnob = document.getElementById('leftKnob');
-  const rightKnob = document.getElementById('rightKnob');
-  const btnShoot = document.getElementById('btnShoot');
-  const btnJet   = document.getElementById('btnJet');
-  const btnNano  = document.getElementById('btnNano');
-  const btnWrench= document.getElementById('btnWrench');
-  const btnGrav  = document.getElementById('btnGrav');
-
-  const touchState = {
-    leftId:null, rightId:null,
-    lx:0, ly:0, rx:0, ry:0,
-    aimActive:false, shootHeld:false, jetHeld:false
-  };
-
-  function isCoarse(){ return matchMedia('(pointer:coarse)').matches; }
-  function updateTouchVisibility(){
-    const show = isCoarse() && !state.paused && !state.over;
-    touchLayer.style.display = show ? 'block' : 'none';
-  }
-  updateTouchVisibility();
-  addEventListener('resize', updateTouchVisibility);
-
-  function normStick(x,y,cx,cy,limit){
-    const dx = x - cx, dy = y - cy;
-    const d = Math.hypot(dx,dy);
-    const nx = d ? dx/d : 0, ny = d ? dy/d : 0;
-    const m = Math.min(d/limit, 1);
-    return {nx:nx*m, ny:ny*m, dx:dx, dy:dy, d:m};
-  }
-
-  function bindStick(area, knob, side){
-    const radius = 70; // knob travel radius
-
-    function getLocal(e){
-      const r = area.getBoundingClientRect();
-      const t = e.changedTouches ? e.changedTouches[0] : e;
-      return { x: t.clientX - r.left, y: t.clientY - r.top };
-    }
-
-    area.addEventListener('touchstart', (e)=>{
-      e.preventDefault();
-      for (const t of e.changedTouches){
-        if (side==='left' && touchState.leftId===null){
-          touchState.leftId = t.identifier;
-          const p = getLocal(e);
-          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
-          touchState.lx = v.nx; touchState.ly = v.ny;
-          leftKnob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
-          leftKnob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
-        } else if (side==='right' && touchState.rightId===null){
-          touchState.rightId = t.identifier;
-          const p = getLocal(e);
-          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
-          touchState.rx = v.nx; touchState.ry = v.ny;
-          touchState.aimActive = v.d > 0.05;
-          rightKnob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
-          rightKnob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
-        }
-      }
-    }, {passive:false});
-
-    area.addEventListener('touchmove', (e)=>{
-      e.preventDefault();
-      for (const t of e.changedTouches){
-        if (side==='left' && t.identifier===touchState.leftId){
-          const p = getLocal(e);
-          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
-          touchState.lx = v.nx; touchState.ly = v.ny;
-          leftKnob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
-          leftKnob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
-        }
-        if (side==='right' && t.identifier===touchState.rightId){
-          const p = getLocal(e);
-          const v = normStick(p.x, p.y, area.clientWidth/2, area.clientHeight/2, radius);
-          touchState.rx = v.nx; touchState.ry = v.ny;
-          touchState.aimActive = v.d > 0.05;
-          rightKnob.style.left = (area.clientWidth/2 + v.nx*radius) + 'px';
-          rightKnob.style.top  = (area.clientHeight/2 + v.ny*radius) + 'px';
-        }
-      }
-    }, {passive:false});
-
-    function reset(side){
-      if (side==='left'){
-        touchState.leftId=null; touchState.lx=0; touchState.ly=0;
-      } else {
-        touchState.rightId=null; touchState.rx=0; touchState.ry=0; touchState.aimActive=false;
-      }
-      knob.style.left = '50%'; knob.style.top = '50%';
-    }
-
-    area.addEventListener('touchend', (e)=>{ e.preventDefault(); for (const t of e.changedTouches){ if (side==='left' && t.identifier===touchState.leftId) reset('left'); if (side==='right' && t.identifier===touchState.rightId) reset('right'); } }, {passive:false});
-    area.addEventListener('touchcancel', (e)=>{ e.preventDefault(); for (const t of e.changedTouches){ if (side==='left' && t.identifier===touchState.leftId) reset('left'); if (side==='right' && t.identifier===touchState.rightId) reset('right'); } }, {passive:false});
-  }
-  bindStick(leftArea, leftKnob, 'left');
-  bindStick(rightArea, rightKnob, 'right');
-
-  function bindHold(btn, on, off){
-    let holding=false;
-    btn.addEventListener('touchstart', (e)=>{ e.preventDefault(); holding=true; on(); }, {passive:false});
-    btn.addEventListener('touchend',   (e)=>{ e.preventDefault(); holding=false; off(); }, {passive:false});
-    btn.addEventListener('touchcancel',(e)=>{ e.preventDefault(); holding=false; off(); }, {passive:false});
-    btn.addEventListener('mousedown', ()=>{ holding=true; on(); });
-    addEventListener('mouseup', ()=>{ if(holding){ holding=false; off(); }});
-  }
-  bindHold(btnShoot, ()=>{ touchState.shootHeld=true; }, ()=>{ touchState.shootHeld=false; });
-  bindHold(btnJet,   ()=>{ touchState.jetHeld=true;  }, ()=>{ touchState.jetHeld=false;  });
-
-  // Item buttons (touch) trigger same logic as PC buttons
-  btnNano.addEventListener('touchstart', (e)=>{ e.preventDefault(); document.getElementById('useNano').click(); }, {passive:false});
-  btnWrench.addEventListener('touchstart',(e)=>{ e.preventDefault(); document.getElementById('useWrench').click(); }, {passive:false});
-  btnGrav.addEventListener('touchstart',  (e)=>{ e.preventDefault(); document.getElementById('useGravite').click(); }, {passive:false});
-
-  // Prevent pinch zoom / pull-to-refresh while playing
-  addEventListener('touchmove', (e)=>{ if (isCoarse()) e.preventDefault(); }, {passive:false});
-
-  // ==============================
   // Step
   // ==============================
   function step(dt){
+    // lock inputs while menu open except allowing keyboard/mouse aim to preview
+    if (!state.started){
+      // keep camera on player spawn for background vibes
+      updateCamera(dt);
+      return;
+    }
     if (state.over) return;
 
     updateZone(dt);
-    if (!state.paused && (state.time - state.rules.lastLootSpawn > state.rules.lootSpawnEvery)){
+    if (state.time - state.rules.lastLootSpawn > state.rules.lootSpawnEvery){
       state.rules.lastLootSpawn = state.time;
       spawnLoot();
     }
 
-    if (state.paused) { updateHud(); return; }
-
-    // Combine inputs (mouse + touch) BEFORE actions
-    const fireHeld = state.inputs.mouse.lmb || touchState.shootHeld || touchState.aimActive;
-    const jetHeld  = state.inputs.mouse.rmb || touchState.jetHeld;
-    state.inputs.lmb = fireHeld;
-    state.inputs.rmb = jetHeld;
-
-    // Movement (KB + left stick)
+    // Movement input (PC keys + left joystick)
     const mv = state.inputs.move;
-    mv.x = (keys.KeyD||keys.ArrowRight?1:0) - (keys.KeyA||keys.ArrowLeft?1:0) + (touchState.lx || 0);
-    mv.y = (keys.KeyS||keys.ArrowDown?1:0) - (keys.KeyW||keys.ArrowUp?1:0) + (touchState.ly || 0);
-    let mlen = Math.hypot(mv.x,mv.y);
-    if (mlen>1){ mv.x/=mlen; mv.y/=mlen; }
-    const spd = 40;
-    state.player.vx += (mv.x)*spd*dt;
-    state.player.vy += (mv.y)*spd*dt;
-
-    // Aim: mouse or right stick vector
-    let aimX = state.inputs.mx + cam.x;
-    let aimY = state.inputs.my + cam.y;
-    if (touchState.aimActive){
-      const scale = 280; // stick aim length
-      aimX = state.player.x + touchState.rx * scale;
-      aimY = state.player.y + touchState.ry * scale;
+    const keyX = (keys.KeyD||keys.ArrowRight?1:0) - (keys.KeyA||keys.ArrowLeft?1:0);
+    const keyY = (keys.KeyS||keys.ArrowDown?1:0) - (keys.KeyW||keys.ArrowUp?1:0);
+    const inX = mv.x || keyX, inY = mv.y || keyY;
+    if (inX || inY){
+      const len = Math.hypot(inX,inY) || 1;
+      const spd = 40;
+      state.player.vx += (inX/len)*spd*dt;
+      state.player.vy += (inY/len)*spd*dt;
     }
-    state.player.angle = Math.atan2(aimY - state.player.y, aimX - state.player.x);
+
+    // Aim (mouse OR right joystick vector)
+    if (!joyLook.active){
+      state.player.angle = Math.atan2(state.inputs.my + cam.y - state.player.y,
+                                      state.inputs.mx + cam.x - state.player.x);
+    } else {
+      // joyLook sets state.player.angle in joystick handler
+    }
 
     // Planet contact
     state.player.onPlanet = !!planetAt(state.player.x, state.player.y);
 
-    // Jet (hold works on PC now)
+    // Jetpack: PC (RMB) OR mobile (jetHeld)
     const jet = state.player.jet;
-    if (!state.player.onPlanet && state.inputs.rmb && jet.fuel>0){
+    const jetHeld = state.inputs.rmb || state.inputs.jetHeld;
+    if (!state.player.onPlanet && jetHeld && jet.fuel>0){
       jet.active = true;
       const thrust = 160;
       state.player.vx += Math.cos(state.player.angle)*thrust*dt;
@@ -754,10 +577,10 @@
       jet.fuel = Math.max(0, jet.fuel - dt*0.45);
     } else {
       jet.active = false;
-      if (!state.inputs.rmb) jet.fuel = clamp(jet.fuel + dt*0.18, 0, 1 + (state.player.inv.gravite>0?0.5:0));
+      if (!jetHeld) jet.fuel = clamp(jet.fuel + dt*0.18, 0, 1 + (state.player.inv.gravite>0?0.5:0));
     }
 
-    // Shooting (auto works when LMB held)
+    // Shooting (PC LMB or mobile shootHeld)
     tryShoot(state.player, dt);
 
     // AI
@@ -768,9 +591,9 @@
     for (const u of allUnits){
       u.vx *= (1-0.08);
       u.vy *= (1-0.08);
-      const spdMax = Math.hypot(u.vx,u.vy);
+      const spd = Math.hypot(u.vx,u.vy);
       const maxSpd = u.isAI ? state.rules.aiMaxSpeed : 260;
-      if (spdMax>maxSpd){ u.vx *= maxSpd/spdMax; u.vy *= maxSpd/spdMax; }
+      if (spd>maxSpd){ u.vx *= maxSpd/spd; u.vy *= maxSpd/spd; }
       u.x += u.vx*dt*60;
       u.y += u.vy*dt*60;
       const dz = Math.hypot(u.x-state.zone.x, u.y-state.zone.y) - state.zone.r;
@@ -842,27 +665,27 @@
     for (let i=state.ai.length-1;i>=0;i--){ if (state.ai[i].hp<=0) state.ai.splice(i,1); }
 
     // Win/Lose
-    if (state.player.hp<=0 && !state.over){ state.over=true; state.win=false; document.getElementById('banner').textContent='DEFEAT'; showEndMenu(); }
-    if (state.ai.length===0 && state.player.hp>0 && !state.over){ state.over=true; state.win=true; document.getElementById('banner').textContent='VICTORY!'; showEndMenu(); }
+    if (state.player.hp<=0 && !state.over){ state.over=true; state.win=false; document.getElementById('banner').textContent='DEFEAT'; }
+    if (state.ai.length===0 && state.player.hp>0 && !state.over){ state.over=true; state.win=true; document.getElementById('banner').textContent='VICTORY!'; }
 
+    // Camera AFTER movement
     updateCamera(dt);
-    updateHud();
-  }
 
-  function updateHud(){
+    // HUD
     const p = state.player, z = state.zone, g = Guns[p.gunKey];
     document.getElementById('hp').textContent   = `HP: ${Math.ceil(p.hp)}`;
     document.getElementById('suit').textContent = `Suit: ${Math.ceil(p.suit)}`;
     document.getElementById('gun').textContent  = `Gun: ${g.name}`;
     document.getElementById('ammo').textContent = `Ammo: ${p.ammo}/${g.maxAmmo}`;
     document.getElementById('cons').textContent = `NanoInject×${p.inv.nano} | Wrench×${p.inv.wrench} | Gravite×${p.inv.gravite}`;
-    document.getElementById('zone').textContent = `Anomaly: ${z.phase===0?`stable ${z.phaseTimer.toFixed(1)}s`:`shrinking ${z.phaseTimer.toFixed(1)}s`} r=${z.r.toFixed(0)}`;
+    document.getElementById('zone').textContent = `Field: ${z.phase===0?`stable ${z.phaseTimer.toFixed(1)}s`:`shrinking ${z.phaseTimer.toFixed(1)}s`} r=${z.r.toFixed(0)}`;
     document.getElementById('alive').textContent= `Alive: ${1+state.ai.length}`;
     document.getElementById('time').textContent = `Time: ${fmtTime(state.time)}`;
-    const pEnt = state.player;
-    useNano.disabled    = !(pEnt.inv.nano   > 0 && pEnt.hp   < pEnt.maxHp);
-    useWrench.disabled  = !(pEnt.inv.wrench > 0 && pEnt.suit < pEnt.maxSuit);
-    useGravite.disabled = !(pEnt.inv.gravite> 0);
+
+    // Buttons enablement
+    useNano.disabled    = !(p.inv.nano   > 0 && p.hp   < p.maxHp);
+    useWrench.disabled  = !(p.inv.wrench > 0 && p.suit < p.maxSuit);
+    useGravite.disabled = !(p.inv.gravite> 0);
   }
 
   // ==============================
@@ -873,7 +696,7 @@
     ctx.save();
     ctx.translate(view.w/2 - cam.x, view.h/2 - cam.y);
 
-    // Anomaly ring
+    // Zone ring
     ctx.beginPath(); ctx.strokeStyle='#2a5cff'; ctx.lineWidth=2; ctx.globalAlpha=0.6;
     ctx.arc(state.zone.x, state.zone.y, state.zone.r, 0, TAU); ctx.stroke(); ctx.globalAlpha=1;
 
@@ -928,15 +751,7 @@
   function box(x,y){ ctx.fillRect(x-8,y-8,16,16); }
   function circle(x,y){ ctx.beginPath(); ctx.arc(x,y,9,0,TAU); ctx.fill(); }
   function tri(x,y){ ctx.beginPath(); ctx.moveTo(x,y-10); ctx.lineTo(x+9,y+7); ctx.lineTo(x-9,y+7); ctx.closePath(); ctx.fill(); }
-  function hex(x,y){
-    ctx.beginPath();
-    for (let i=0;i<6;i++){
-      const a=i*TAU/6;
-      const px=x+Math.cos(a)*10, py=y+Math.sin(a)*10;
-      i?ctx.lineTo(px,py):ctx.moveTo(px,py);
-    }
-    ctx.closePath(); ctx.fill();
-  }
+  function hex(x,y){ ctx.beginPath(); for (let i=0;i<6;i++){ const a=i*TAU/6; const px=x+Math.cos(a)*10, py=y+Math.sin(a)*10; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.closePath(); ctx.fill(); }
   function star(x,y){ ctx.beginPath(); for (let i=0;i<10;i++){ const r=(i%2?5:10); const a=i*TAU/10; const px=x+Math.cos(a)*r, py=y+Math.sin(a)*r; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.closePath(); ctx.fill(); }
   function glyph(x,y,t){ ctx.fillStyle='#07111f'; ctx.font='10px system-ui,Segoe UI,Roboto,Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,x,y); }
 
@@ -946,59 +761,135 @@
   const useNano    = document.getElementById('useNano');
   const useWrench  = document.getElementById('useWrench');
   const useGravite = document.getElementById('useGravite');
-  useNano.addEventListener('click', ()=>{ const p = state.player; if (p.inv.nano<=0 || p.hp>=p.maxHp) return; p.inv.nano--; p.hp = Math.min(p.maxHp, p.hp+40); log('Used NanoInject'); });
-  useWrench.addEventListener('click', ()=>{ const p = state.player; if (p.inv.wrench<=0 || p.suit>=p.maxSuit) return; p.inv.wrench--; p.suit = Math.min(p.maxSuit, p.suit+40); log('Used Wrench'); });
-  useGravite.addEventListener('click', ()=>{ const p = state.player; if (p.inv.gravite<=0) return; p.inv.gravite--; p.jet.cd = 0; p.jet.fuel = Math.min(1.5, p.jet.fuel + 0.5); log('Used Gravite (jet boost)'); });
 
-  // ==============================
-  // Menu wiring
-  // ==============================
-  const menu = document.getElementById('menu');
-  const startBtn = document.getElementById('startBtn');
-  const resumeBtn = document.getElementById('resumeBtn');
-  const restartBtn = document.getElementById('restartBtn');
-  const pauseLabel = document.getElementById('pauseLabel');
-
-  function setMenuVisibility(show, showPauseLabel){
-    menu.style.display = show ? 'flex' : 'none';
-    pauseLabel.style.display = show && showPauseLabel ? 'block' : 'none';
-    startBtn.style.display = (!showPauseLabel && show) ? 'inline-block' : 'none';
-    resumeBtn.style.display = (showPauseLabel && show) ? 'inline-block' : 'none';
-    updateTouchVisibility(); // keep joysticks hidden while menu is up
-  }
-  function showEndMenu(){
-    state.paused = true;
-    setMenuVisibility(true, true);
-    pauseLabel.textContent = (state.win ? 'Victory — Esc to resume (spectate disabled)' : 'Defeat — Esc to retry');
-    updateTouchVisibility();
-  }
-  startBtn.addEventListener('click', ()=>{
-    state.paused = false;
-    setMenuVisibility(false, false);
-    last = performance.now();
-    updateTouchVisibility();
-  });
-  resumeBtn.addEventListener('click', ()=>{
-    if (!state.over){
-      state.paused = false;
-      setMenuVisibility(false, true);
-      last = performance.now();
-      updateTouchVisibility();
-    }
-  });
-  restartBtn.addEventListener('click', ()=>location.reload());
-  setMenuVisibility(true, false);
+  useNano.addEventListener('click', ()=>{ const p = state.player; if (p.inv.nano<=0 || p.hp>=p.maxHp) return;
+    p.inv.nano--; p.hp = Math.min(p.maxHp, p.hp+40); log('Used NanoInject'); });
+  useWrench.addEventListener('click', ()=>{ const p = state.player; if (p.inv.wrench<=0 || p.suit>=p.maxSuit) return;
+    p.inv.wrench--; p.suit = Math.min(p.maxSuit, p.suit+40); log('Used Wrench'); });
+  useGravite.addEventListener('click', ()=>{ const p = state.player; if (p.inv.gravite<=0) return;
+    p.inv.gravite--; p.jet.cd = 0; p.jet.fuel = Math.min(1.5, p.jet.fuel + 0.5); log('Used Gravite (jet boost)'); });
 
   // ==============================
   // Helpers
   // ==============================
-  function planetAt(x,y){
-    for (const p of state.planets){
-      if (Math.hypot(x-p.x, y-p.y) <= p.r + 12) return p;
-    }
-    return null;
-  }
   function fmtTime(t){ const s=Math.floor(t%60), m=Math.floor(t/60); return `${m}:${s.toString().padStart(2,'0')}`; }
+
+  // ==============================
+  // Main menu
+  // ==============================
+  const menu = document.getElementById('menu');
+  const startBtn = document.getElementById('startBtn');
+  const mobileElems = [document.getElementById('joyMove'), document.getElementById('joyLook'),
+                       document.getElementById('btnShoot'), document.getElementById('btnJet')];
+
+  function setMobileHidden(hide){
+    for (const el of mobileElems){
+      el.classList.toggle('hideDuringMenu', hide);
+    }
+  }
+  setMobileHidden(true);
+
+  function startMatch(){
+    if (state.started) return;
+    state.started = true;
+    menu.style.display = 'none';
+    setMobileHidden(false);
+    log('Match started');
+  }
+  startBtn.addEventListener('click', startMatch);
+
+  // ==============================
+  // Mobile Buttons: SHOOT / JET (stable hold)
+  // ==============================
+  const btnShoot = document.getElementById('btnShoot');
+  const btnJet   = document.getElementById('btnJet');
+
+  ['pointerdown','pointerup','pointercancel','lostpointercapture'].forEach(ev => {
+    btnShoot.addEventListener(ev, e => {
+      e.preventDefault();
+      if (ev === 'pointerdown') {
+        btnShoot.setPointerCapture(e.pointerId);
+        state.inputs.shootHeld = true;
+      } else {
+        state.inputs.shootHeld = false;
+      }
+    }, { passive:false });
+  });
+
+  ['pointerdown','pointerup','pointercancel','lostpointercapture'].forEach(ev => {
+    btnJet.addEventListener(ev, e => {
+      e.preventDefault();
+      if (ev === 'pointerdown') {
+        btnJet.setPointerCapture(e.pointerId);
+        state.inputs.jetHeld = true;
+      } else {
+        state.inputs.jetHeld = false;
+      }
+    }, { passive:false });
+  });
+
+  // ==============================
+  // Virtual Joysticks
+  // ==============================
+  function makeJoystick(root, onMove){
+    const stick = root.querySelector('.stick');
+    const center = { x: root.clientWidth/2, y: root.clientHeight/2 };
+    let active = false, pid = null;
+
+    function setStick(dx,dy){
+      const radius = 48; // movement radius inside 60px outer
+      const len = Math.hypot(dx,dy);
+      const cl = len>radius ? radius/len : 1;
+      const sx = center.x + dx*cl, sy = center.y + dy*cl;
+      stick.style.left = sx + 'px'; stick.style.top = sy + 'px';
+      const outX = (dx*cl)/radius, outY = (dy*cl)/radius;
+      onMove(outX, outY, true);
+    }
+    function reset(){
+      stick.style.left = center.x+'px'; stick.style.top = center.y+'px';
+      onMove(0,0,false);
+    }
+
+    root.addEventListener('pointerdown', e=>{
+      e.preventDefault();
+      active = true; pid = e.pointerId; root.setPointerCapture(pid);
+      const rect = root.getBoundingClientRect();
+      setStick(e.clientX-rect.left-center.x, e.clientY-rect.top-center.y);
+    }, {passive:false});
+    root.addEventListener('pointermove', e=>{
+      if (!active || e.pointerId!==pid) return;
+      const rect = root.getBoundingClientRect();
+      setStick(e.clientX-rect.left-center.x, e.clientY-rect.top-center.y);
+    });
+    function end(e){
+      if (!active || (pid!==null && e.pointerId!==pid)) return;
+      active=false; try{ root.releasePointerCapture(pid); }catch{}
+      pid=null; reset();
+    }
+    root.addEventListener('pointerup', end);
+    root.addEventListener('pointercancel', end);
+    root.addEventListener('lostpointercapture', end);
+
+    // public state
+    return { get active(){ return active; } };
+  }
+
+  const joyMoveEl = document.getElementById('joyMove');
+  const joyLookEl = document.getElementById('joyLook');
+
+  const joyMove = makeJoystick(joyMoveEl, (x,y,act)=>{
+    // y is inverted because UI coords; flip to game coords where up is -1
+    state.inputs.move.x = x;
+    state.inputs.move.y = y; // positive down is fine since we normalize on use
+  });
+
+  const joyLook = makeJoystick(joyLookEl, (x,y,act)=>{
+    // convert joystick vector into angle (centered: no aim update)
+    if (act && (x!==0 || y!==0)){
+      const ang = Math.atan2(y, x); // note: joystick coords; consistent with draw
+      state.player.angle = ang;
+    }
+  });
 
   // ==============================
   // Sanity Checks
